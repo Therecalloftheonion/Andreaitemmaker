@@ -236,6 +236,10 @@ pack:
 `config-version` is managed automatically — plugin updates merge new options into your
 `config.yml` while preserving every value you changed.
 
+## 📄 License
+
+Licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file.
+
 ---
 
 <div align="center">
