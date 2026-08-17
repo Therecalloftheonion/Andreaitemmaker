@@ -1,0 +1,24 @@
+# Example custom armor piece. Worn texture renders on 1.21.2+ servers.
+type: ARMOR
+material: diamond_helmet
+display-name: "&aVerdant Helmet"
+lore:
+  - "&7Grants night vision while worn."
+attributes:
+  armor: 4.0
+  armor_toughness: 2.0
+enchantments:
+  unbreaking: 3
+unbreakable: true
+texture:
+  pattern: checker
+  color: "#4ade80"
+  color2: "#14532d"
+  outline: true
+mechanics:
+  armor-effects:
+    effects:
+      - type: NIGHT_VISION
+        duration: 5
+        amplifier: 0
+        particles: false

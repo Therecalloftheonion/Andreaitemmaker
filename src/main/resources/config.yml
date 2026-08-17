@@ -1,0 +1,57 @@
+# Andreaitemmaker main configuration.
+# config-version is managed automatically: when the plugin updates, new options are
+# added here while your existing values are preserved.
+
+config-version: 1
+
+# Namespace used for all generated resource pack assets (lowercase, no spaces).
+namespace: itemmaker
+
+pack:
+  # Resource pack format override. Leave as AUTO to detect from the server version.
+  # Known formats: 32 (1.20.5-6), 34 (1.21-1.21.1), 42 (1.21.2-3), 46 (1.21.4),
+  # 55 (1.21.5), 63 (1.21.6), 64 (1.21.7-8), 69 (1.21.9-10), 75 (1.21.11),
+  # 84 (26.1), 88 (26.2+).
+  format: AUTO
+
+  # Edge length of generated textures: 16, 32 or 64.
+  texture-size: 16
+
+  description: "Andreaitemmaker custom content"
+
+  # Send the pack to players when they join.
+  send-on-join: true
+  # Force the pack (players who decline get a message).
+  required: false
+  prompt: "Install the custom content pack?"
+  # Re-send the pack to online players after a reload.
+  resend-on-reload: true
+
+  # Built-in HTTP server that serves pack.zip. Disable it when using pack.upload instead.
+  # On every generation the pack is ALSO written unzipped to plugins/Andreaitemmaker/pack/
+  # (and as pack.zip), so if your firewall blocks the server port you can host that folder
+  # anywhere (file host, web server) and set pack.public-url below.
+  serve:
+    enabled: true
+    port: 8163
+
+  # Optional: fixed URL players should download from (overrides the generated one).
+  public-url: ""
+  # Optional: public IP used to build the URL when public-url is empty.
+  public-ip: ""
+
+  # Optional: upload the pack to an external file host (CDN) with HTTP PUT/POST.
+  upload:
+    enabled: false
+    method: PUT
+    url: ""
+    # Final URL players use after the upload (e.g. your CDN link). Empty = upload url.
+    public-url: ""
+    headers:
+      Authorization: "Bearer your-token-here"
+
+content:
+  # First custom-model-data value assigned automatically (legacy servers only).
+  custom-model-data-start: 1000
+  # How often worn armor mechanics are checked, in seconds.
+  armor-tick-seconds: 2

@@ -1,0 +1,13 @@
+# Example furniture piece. Placing spawns an invisible armor stand that renders the item model.
+material: stick
+display-name: "&eWarm Lamp"
+lore:
+  - "&7A cozy little lamp."
+small: true
+consumable: true
+offset-y: 0.0
+texture:
+  pattern: gradient
+  color: "#fde047"
+  color2: "#a16207"
+  outline: true

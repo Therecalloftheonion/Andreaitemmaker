@@ -1,0 +1,25 @@
+name: Andreaitemmaker
+version: '1.0.0'
+main: com.andreaitemmaker.AndreaitemmakerPlugin
+api-version: '1.20'
+authors:
+  - Andreaitemmaker
+description: Config-driven custom items, weapons, armor, blocks and furniture with automatic resource pack generation and distribution.
+website: https://github.com/andreaitemmaker/Andreaitemmaker
+
+commands:
+  andreaitemmaker:
+    description: Main Andreaitemmaker admin command.
+    usage: /andreaitemmaker help
+    aliases: [aitem, itemmaker]
+
+permissions:
+  andreaitemmaker.admin:
+    description: Access to every Andreaitemmaker admin command.
+    default: op
+  andreaitemmaker.give:
+    description: Give custom items to players.
+    default: op
+  andreaitemmaker.bypass:
+    description: Never receive the resource pack prompt.
+    default: false

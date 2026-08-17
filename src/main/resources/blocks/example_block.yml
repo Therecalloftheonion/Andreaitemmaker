@@ -1,0 +1,13 @@
+# Example custom block. The block is placed as its base-block (a full vanilla block)
+# whose model is replaced by the resource pack. One base block = one custom block.
+material: stick
+display-name: "&dAmethyst Crate"
+lore:
+  - "&7A sturdy purple storage crate."
+base-block: white_wool
+drops-item: true
+texture:
+  pattern: checker
+  color: "#c084fc"
+  color2: "#581c87"
+  outline: true

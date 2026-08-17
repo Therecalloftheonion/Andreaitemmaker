@@ -1,0 +1,20 @@
+# Build output (contains local absolute paths — never commit)
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local server data — contains real configs that may hold API tokens (never commit)
+plugins/
+*.log
