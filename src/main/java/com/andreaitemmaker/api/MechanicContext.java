@@ -61,19 +61,31 @@ public final class MechanicContext {
         if (hasCooldown(mechanic)) {
             return false;
         }
-        COOLDOWNS.put(key(mechanic), System.currentTimeMillis() + seconds * 1000L);
+        COOLDOWNS.put(key(player, item.getId(), mechanic), System.currentTimeMillis() + seconds * 1000L);
         return true;
     }
 
     /** Remaining cooldown for {@code mechanic} in seconds, 0 when not active. */
     public long cooldownRemaining(String mechanic) {
-        Long end = COOLDOWNS.get(key(mechanic));
+        return cooldownRemaining(player, item.getId(), mechanic);
+    }
+
+    /**
+     * Remaining cooldown in seconds for an arbitrary player/item/mechanic combination
+     * (e.g. from PlaceholderAPI), 0 when inactive or unknown.
+     */
+    public static long cooldownRemaining(Player player, String itemId, String mechanic) {
+        if (player == null) {
+            return 0;
+        }
+        String key = key(player, itemId, mechanic);
+        Long end = COOLDOWNS.get(key);
         if (end == null) {
             return 0;
         }
         long remaining = (end - System.currentTimeMillis()) / 1000;
         if (remaining <= 0) {
-            COOLDOWNS.remove(key(mechanic));
+            COOLDOWNS.remove(key);
             return 0;
         }
         return remaining;
@@ -101,8 +113,7 @@ public final class MechanicContext {
         return true;
     }
 
-    private String key(String mechanic) {
-        UUID uuid = player.getUniqueId();
-        return uuid + "|" + item.getId() + "|" + mechanic;
+    private static String key(Player player, String itemId, String mechanic) {
+        return player.getUniqueId() + "|" + itemId + "|" + mechanic;
     }
 }

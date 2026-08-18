@@ -6,6 +6,7 @@ authors:
   - Andreaitemmaker
 description: Config-driven custom items, weapons, armor, blocks and furniture with automatic resource pack generation and distribution.
 website: https://github.com/andreaitemmaker/Andreaitemmaker
+softdepend: [PlaceholderAPI]
 
 commands:
   andreaitemmaker:

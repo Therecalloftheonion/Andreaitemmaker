@@ -18,6 +18,7 @@ import com.andreaitemmaker.listener.JoinListener;
 import com.andreaitemmaker.listener.UseListener;
 import com.andreaitemmaker.mechanics.MechanicRegistryImpl;
 import com.andreaitemmaker.pack.ResourcePackManagerImpl;
+import com.andreaitemmaker.placeholder.AndreaitemmakerExpansion;
 import com.andreaitemmaker.util.ServerVersion;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
@@ -43,6 +44,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
     private ServerVersion.Version serverVersion;
     private ServerVersion.PackTarget packTarget;
     private ArmorTracker armorTracker;
+    private AndreaitemmakerExpansion papiExpansion;
     private int armorTaskId = -1;
     private int reconcileTaskId = -1;
 
@@ -94,6 +96,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         startArmorTask();
         packManager.generate();
         AndreaitemmakerAPI.init(this);
+        registerPlaceholders();
 
         getLogger().info("Enabled with " + contentRegistry.getAll().size() + " content entries, "
                 + "resource pack generation " + (packManager.isGenerated() ? "ready" : "started in the background"));
@@ -102,10 +105,29 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         AndreaitemmakerAPI.close();
+        if (papiExpansion != null) {
+            papiExpansion.unregister();
+            papiExpansion = null;
+        }
         if (packManager != null) {
             packManager.shutdown();
         }
         cancelTasks();
+    }
+
+    /** Optional PlaceholderAPI integration: register the expansion only when PAPI is present. */
+    private void registerPlaceholders() {
+        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") == null) {
+            return;
+        }
+        papiExpansion = new AndreaitemmakerExpansion(this);
+        if (papiExpansion.register()) {
+            getLogger().info("PlaceholderAPI found: registered '" + papiExpansion.getIdentifier()
+                    + "' placeholders (has_item, amount, holding, cooldown, content counts)");
+        } else {
+            getLogger().warning("PlaceholderAPI found but the expansion could not be registered");
+            papiExpansion = null;
+        }
     }
 
     /**

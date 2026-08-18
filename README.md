@@ -192,6 +192,27 @@ Cancellable events: `CustomItemUseEvent`, `CustomItemHitEvent`, `CustomItemConsu
 `CustomBlockPlaceEvent`, `CustomBlockBreakEvent`, `CustomFurniturePlaceEvent`,
 `CustomFurnitureBreakEvent`.
 
+## 🔌 PlaceholderAPI (optional)
+
+With [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) installed, the
+plugin registers placeholders under the `andreaitemmaker` identifier — without PAPI the
+plugin works exactly the same, the placeholders are simply unavailable.
+
+| Placeholder | Returns |
+| --- | --- |
+| `%andreaitemmaker_has_item_<id>%` | `yes`/`no` — the player has the item in their inventory |
+| `%andreaitemmaker_amount_<id>%` | total count of that item in the player's inventory |
+| `%andreaitemmaker_holding_<id>%` | `yes`/`no` — the item is in the player's main hand |
+| `%andreaitemmaker_cooldown_<id>_<mechanic>%` | remaining cooldown seconds for that mechanic (`0` = ready) |
+| `%andreaitemmaker_content_count%` | total content entries |
+| `%andreaitemmaker_item_count%` / `weapon_count` / `armor_count` / `food_count` / `block_count` / `furniture_count` | per-type counts |
+
+Example line for a scoreboard/TAB plugin:
+
+```
+Cooldown: %andreaitemmaker_cooldown_storm_blade_lightning%s
+```
+
 ## 🧪 Tests
 
 56 unit tests cover PNG encode/decode round-trips, JSON validity, texture generation,
