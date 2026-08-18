@@ -7,8 +7,8 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.5%20→%2026.2+-blue)
 ![Spigot](https://img.shields.io/badge/Spigot%20%2F%20Paper-supported-brightgreen)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
-![Version](https://img.shields.io/badge/version-1.0.0-informational)
-![Tests](https://img.shields.io/badge/tests-22%20passing-brightgreen)
+![Version](https://img.shields.io/badge/version-2.0.0--beta-informational)
+![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)
 ![Vibe](https://img.shields.io/badge/vibe-coded-ff69b4)
 
 *No manual resource pack work. No texture editor required. Just YAML.*
@@ -37,7 +37,7 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 ./mvnw package        # Windows: mvnw.cmd package
 ```
 
-1. Drop `target/Andreaitemmaker-1.0.0.jar` into your server's `plugins/` folder.
+1. Drop `target/Andreaitemmaker-2.0.0-beta.jar` into your server's `plugins/` folder.
 2. Restart. The plugin creates `plugins/Andreaitemmaker/` with `config.yml` and example content.
 3. Give yourself something:
    ```
@@ -194,8 +194,14 @@ Cancellable events: `CustomItemUseEvent`, `CustomItemHitEvent`, `CustomItemConsu
 
 ## 🧪 Tests
 
-22 unit tests cover PNG encode/decode round-trips, JSON validity, texture generation,
-version → pack-format mapping, and full modern/legacy pack generation.
+56 unit tests cover PNG encode/decode round-trips, JSON validity, texture generation,
+version → pack-format mapping, full modern/legacy pack generation, plus:
+
+- path-traversal protection (absolute paths, `../`, Windows drives, backslashes, symlink escapes)
+- registry consistency (replacement removes stale indexes, base-block conflicts, immutability)
+- the embedded HTTP server over a real socket (headers, ETag/304, path security, method rejection)
+- async generation coordinator (overlapping requests coalesce to the latest snapshot)
+- imported model/texture collisions and invalid-model rejection
 
 ## 🗺️ Version support
 
@@ -211,11 +217,39 @@ version → pack-format mapping, and full modern/legacy pack generation.
 
 `pack.format` in `config.yml` overrides detection if you ever need to pin it.
 
+### How it works under the hood
+
+- **Custom blocks have a persistent identity.** Placing a custom block stores its id in the
+  *chunk's* persistent data, keyed by block coordinates — not by material. A normal vanilla
+  STONE or WOOL block is never treated as a custom block, and the identity survives server
+  restarts, plugin reloads and chunk unload/reload in every world. The tag is removed when
+  the block is broken or replaced.
+- **Pack generation never blocks the server.** On reload the plugin snapshots the content
+  and builds textures, models, the zip and the SHA-1 on a background thread; the finished
+  pack is swapped in atomically, so the previously generated pack keeps being served until
+  the new one is fully ready. Overlapping reloads/generations coalesce into a single run.
+- **Reload is transactional.** Config and content are loaded and validated first; the old
+  state stays active until the new one is complete, so a broken config never leaves the
+  plugin half-loaded.
+- **Config asset paths are validated.** `model:` and `texture:` entries must be relative
+  paths inside `assets/` — traversal attempts (`../`, absolute paths, Windows drives,
+  symlink escapes) are rejected at load time with a clear error.
+- **The built-in pack server is minimal and safe.** It serves only `/pack.zip` (never maps
+  request paths to files), streams the pack in chunks, uses a bounded thread pool, and
+  answers with `Content-Length`, `Content-Type`, `Cache-Control` and `ETag`/304 so clients
+  don't re-download an unchanged pack.
+- **Armor mechanics only scan players who actually wear custom armor.** The tracked set is
+  kept fresh by inventory/interact/death events plus a slow reconciliation, instead of
+  checking every player's four armor slots on every tick.
+
 ### Known limitations
 
 - **Custom blocks**: one base block per custom block; the base block's vanilla appearance is replaced for everyone with the pack.
 - **Worn armor textures** render on 1.21.2+ (equippable component). On 1.20.5 – 1.21.1 the armor piece is wearable but shows the vanilla worn texture.
 - Items/blocks placed through the API bypass protection plugins (WorldGuard, etc.) — add protections in your own listeners if needed.
+- **Async generation**: `/aitem reload` and `/aitem pack regenerate` report that generation *started* — the pack swap happens in the background and players receive the new pack automatically once it's ready.
+- **External world editors**: replacing a custom block with a *different* material is detected and the stale tag cleaned up; replacing it with the *same* base material is indistinguishable and breaking it will drop the custom item.
+- **Armor tracking** covers all vanilla ways to change armor (equip clicks, right-click equip, death/respawn, join/quit) plus a 30-second safety recheck; direct `setItem` calls from other plugins are picked up within that window.
 
 ## 🛠️ Configuration
 
