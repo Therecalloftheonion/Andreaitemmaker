@@ -136,7 +136,7 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
         try {
             plugin.reloadAll();
             sender.sendMessage(Chat.color("&aReload complete. &f" + plugin.getContentRegistry().getAll().size()
-                    + " content entries, pack " + (plugin.getPackManager().isGenerated() ? "generated" : "FAILED") + "."));
+                    + " content entries, pack generation started in the background."));
         } catch (Exception e) {
             plugin.getLogger().severe("Reload failed: " + e);
             sender.sendMessage(Chat.color("&cReload failed, see console."));
@@ -156,10 +156,9 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
             }
             case "regenerate" -> {
                 boolean ok = plugin.getPackManager().generate();
-                sender.sendMessage(Chat.color(ok ? "&aPack regenerated." : "&cPack generation failed, see console."));
-                if (ok) {
-                    plugin.getPackManager().sendToAll();
-                }
+                sender.sendMessage(Chat.color(ok
+                        ? "&aPack regeneration started in the background (players get it automatically when ready)."
+                        : "&cPack generation could not be started, see console."));
             }
             case "send" -> {
                 if (args.length >= 3 && !args[2].equalsIgnoreCase("all")) {

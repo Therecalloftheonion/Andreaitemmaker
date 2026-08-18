@@ -76,7 +76,7 @@ public final class TextureGenerator {
         if (outline) {
             for (int x = 0; x < w; x++) {
                 px[x] = darken(px[x]);
-                px[(h - 1) * w + x] = darken(px[x]);
+                px[(h - 1) * w + x] = darken(px[(h - 1) * w + x]);
             }
             for (int y = 0; y < h; y++) {
                 px[y * w] = darken(px[y * w]);

@@ -15,23 +15,73 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-/** Registry of all loaded custom content. */
+/**
+ * Registry of all loaded custom content.
+ *
+ * <p>{@code byId} is the single source of truth; every other index is derived from it and
+ * kept in sync on {@link #add}/{@link #remove}. Replacing or removing an entry always
+ * removes every stale index that belonged to the old object (e.g. the base-block mapping
+ * of a custom block that got redefined as a plain item).
+ */
 public final class ContentRegistry {
 
     private final Map<String, CustomItem> byId = new LinkedHashMap<>();
     private final Map<Material, CustomBlock> blocksByBase = new LinkedHashMap<>();
+
+    /** Build a fully-populated registry from a load result. Throws on conflicting bases. */
+    public static ContentRegistry build(Collection<CustomItem> items) {
+        ContentRegistry registry = new ContentRegistry();
+        for (CustomItem item : items) {
+            registry.add(item);
+        }
+        return registry;
+    }
 
     public void clear() {
         byId.clear();
         blocksByBase.clear();
     }
 
-    /** Register content (replaces anything with the same id). */
+    /**
+     * Register content, replacing anything with the same id. Stale indexes of the replaced
+     * entry are removed first, and two different custom blocks are never allowed to share a
+     * base block (they would be indistinguishable in the world).
+     *
+     * @throws IllegalStateException when a different custom block already uses the same base block
+     */
     public void add(CustomItem item) {
-        byId.put(item.getId(), item);
+        Objects.requireNonNull(item, "item");
+        CustomItem previous = byId.get(item.getId());
+        if (previous != null && previous != item) {
+            removeIndexes(previous);
+        }
         if (item instanceof CustomBlock block) {
+            CustomBlock existing = blocksByBase.get(block.getBaseBlock());
+            if (existing != null && existing != item && !existing.getId().equals(item.getId())) {
+                throw new IllegalStateException("Custom block '" + item.getId() + "' conflicts with '"
+                        + existing.getId() + "': both use base block " + block.getBaseBlock()
+                        + " (each base block can back only one custom block)");
+            }
             blocksByBase.put(block.getBaseBlock(), block);
+        }
+        byId.put(item.getId(), item);
+    }
+
+    /** Remove content by id, including every index pointing at it. */
+    public void remove(String id) {
+        CustomItem item = byId.remove(id);
+        if (item != null) {
+            removeIndexes(item);
+        }
+    }
+
+    private void removeIndexes(CustomItem item) {
+        if (item instanceof CustomBlock block) {
+            // Only drop the mapping when it still points at this exact instance, so a newer
+            // block with the same base (reload) is never removed by the stale cleanup.
+            blocksByBase.remove(block.getBaseBlock(), block);
         }
     }
 
@@ -87,7 +137,7 @@ public final class ContentRegistry {
                 out.add(block);
             }
         }
-        return out;
+        return Collections.unmodifiableList(out);
     }
 
     public CustomFurniture getFurniture(String id) {
@@ -102,7 +152,7 @@ public final class ContentRegistry {
                 out.add(furniture);
             }
         }
-        return out;
+        return Collections.unmodifiableList(out);
     }
 
     private List<CustomItem> filter(CustomItemType type) {
@@ -112,6 +162,6 @@ public final class ContentRegistry {
                 out.add(item);
             }
         }
-        return out;
+        return Collections.unmodifiableList(out);
     }
 }

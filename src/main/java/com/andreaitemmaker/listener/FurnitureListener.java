@@ -75,9 +75,19 @@ public final class FurnitureListener implements Listener {
     private CustomFurniture furnitureOf(ArmorStand stand) {
         String id = stand.getPersistentDataContainer().get(Keys.FURNITURE_ID, PersistentDataType.STRING);
         if (id == null) {
+            return null; // normal armor stand, never touched
+        }
+        CustomFurniture furniture = plugin.getContentRegistry().getFurniture(id);
+        if (furniture == null) {
+            // The furniture content was removed from config (reload/restart). The stand is
+            // an invisible, invulnerable marker nobody can interact with: remove it so it
+            // cannot become an orphaned phantom entity.
+            plugin.getLogger().fine("Removing orphaned furniture armor stand with unknown id '"
+                    + id + "' at " + stand.getLocation());
+            stand.remove();
             return null;
         }
-        return plugin.getContentRegistry().getFurniture(id);
+        return furniture;
     }
 
     private void breakFurniture(Player player, ArmorStand stand, CustomFurniture furniture) {

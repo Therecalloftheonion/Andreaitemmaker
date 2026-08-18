@@ -13,7 +13,12 @@ public interface ResourcePackManager {
     /** Whether a pack has been generated successfully. */
     boolean isGenerated();
 
-    /** Regenerate the pack from the current content. Returns true on success. */
+    /**
+     * Regenerate the pack from the current content. Generation runs in the background and
+     * the finished pack is swapped in atomically, so the previous pack stays valid until
+     * the new one is ready. Returns true when generation was scheduled (or is already
+     * running and will pick up the latest content).
+     */
     boolean generate();
 
     /** The generated zip file (may not exist until {@link #generate()} succeeds). */

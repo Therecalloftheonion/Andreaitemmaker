@@ -10,6 +10,7 @@ import com.andreaitemmaker.api.event.CustomFurniturePlaceEvent;
 import com.andreaitemmaker.api.event.CustomItemConsumeEvent;
 import com.andreaitemmaker.api.event.CustomItemHitEvent;
 import com.andreaitemmaker.api.event.CustomItemUseEvent;
+import com.andreaitemmaker.util.BlockData;
 import com.andreaitemmaker.util.Chat;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -70,8 +71,9 @@ public final class UseListener implements Listener {
             return;
         }
         if (item instanceof CustomFood food) {
-            eat(event, player, hand, stack, food);
-            plugin.runUseMechanics(player, item, stack, hand, event);
+            if (eat(event, player, hand, stack, food)) {
+                plugin.runUseMechanics(player, item, stack, hand, event);
+            }
             return;
         }
         if (!item.getMechanics().isEmpty()) {
@@ -103,13 +105,14 @@ public final class UseListener implements Listener {
 
     // ---- food ----
 
-    private void eat(PlayerInteractEvent event, Player player, EquipmentSlot hand, ItemStack stack, CustomFood food) {
+    /** @return true when the food was actually consumed (not cancelled by listeners) */
+    private boolean eat(PlayerInteractEvent event, Player player, EquipmentSlot hand, ItemStack stack, CustomFood food) {
         CustomItemConsumeEvent consumeEvent = new CustomItemConsumeEvent(player, food,
                 food.getHunger(), food.getSaturation());
         Bukkit.getPluginManager().callEvent(consumeEvent);
         if (consumeEvent.isCancelled()) {
             event.setCancelled(true);
-            return;
+            return false;
         }
         event.setCancelled(true);
         player.setFoodLevel(Math.min(20, player.getFoodLevel() + consumeEvent.getHunger()));
@@ -120,6 +123,7 @@ public final class UseListener implements Listener {
         if (player.getGameMode() != GameMode.CREATIVE) {
             consume(player, hand, stack);
         }
+        return true;
     }
 
     // ---- block placement ----
@@ -141,6 +145,9 @@ public final class UseListener implements Listener {
             return;
         }
         target.setType(block.getBaseBlock(), false);
+        // Persistent identity: normal blocks of the same material are never treated as
+        // custom, and the tag survives restarts and chunk unload/reload.
+        BlockData.set(target, block.getId());
         player.playSound(target.getLocation(), Sound.BLOCK_STONE_PLACE, 1f, 1f);
         if (player.getGameMode() != GameMode.CREATIVE) {
             consume(player, hand, stack);
@@ -164,6 +171,10 @@ public final class UseListener implements Listener {
             return;
         }
         ArmorStand stand = player.getWorld().spawn(location, ArmorStand.class);
+        if (stand == null) {
+            // Entity limit reached or spawning prevented; do not consume the item.
+            return;
+        }
         stand.setVisible(false);
         stand.setMarker(true);
         stand.setSmall(furniture.isSmall());

@@ -16,4 +16,10 @@ public final class Keys {
 
     /** Tag on furniture armor stands: the furniture content id. */
     public static final NamespacedKey FURNITURE_ID = new NamespacedKey("andreaitemmaker", "furniture");
+
+    /**
+     * Tag on chunk persistent data: a nested container keyed by "x,y,z" holding the
+     * custom block id placed at that coordinate (see {@link com.andreaitemmaker.util.BlockData}).
+     */
+    public static final NamespacedKey BLOCK_DATA = new NamespacedKey("andreaitemmaker", "blocks");
 }

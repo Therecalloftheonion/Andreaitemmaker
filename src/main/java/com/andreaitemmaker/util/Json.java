@@ -88,6 +88,54 @@ public final class Json {
         return sb.append('"').append(escape(value.toString())).append('"');
     }
 
+    /**
+     * Lightweight structural validation for JSON coming from external files (imported models):
+     * trims a possible BOM, requires a top-level object and checks that braces, brackets and
+     * strings are balanced (escaped quotes are handled). This is not a full parser, but it
+     * catches truncated or clearly broken files before they are injected into the pack.
+     */
+    public static boolean looksValid(String content) {
+        if (content == null) {
+            return false;
+        }
+        String s = content.trim();
+        if (s.startsWith("\uFEFF")) {
+            s = s.substring(1).trim();
+        }
+        if (!s.startsWith("{") || !s.endsWith("}")) {
+            return false;
+        }
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            switch (c) {
+                case '{', '[' -> depth++;
+                case '}', ']' -> {
+                    depth--;
+                    if (depth < 0) {
+                        return false;
+                    }
+                }
+                case '"' -> inString = true;
+                default -> {
+                }
+            }
+        }
+        return depth == 0 && !inString;
+    }
+
     private static String escape(String s) {
         StringBuilder sb = new StringBuilder(s.length() + 8);
         for (int i = 0; i < s.length(); i++) {

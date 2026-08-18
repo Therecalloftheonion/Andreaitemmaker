@@ -10,6 +10,8 @@ import com.andreaitemmaker.config.ContentLoader;
 import com.andreaitemmaker.config.PluginConfig;
 import com.andreaitemmaker.content.ContentRegistry;
 import com.andreaitemmaker.content.ItemFactory;
+import com.andreaitemmaker.listener.ArmorListener;
+import com.andreaitemmaker.listener.ArmorTracker;
 import com.andreaitemmaker.listener.BlockListener;
 import com.andreaitemmaker.listener.FurnitureListener;
 import com.andreaitemmaker.listener.JoinListener;
@@ -28,18 +30,21 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** Andreaitemmaker: config-driven custom content with automatic resource pack generation. */
 public final class AndreaitemmakerPlugin extends JavaPlugin {
 
     private PluginConfig configValues;
-    private ContentRegistry contentRegistry;
+    private volatile ContentRegistry contentRegistry;
     private ItemFactory itemFactory;
     private MechanicRegistryImpl mechanicRegistry;
     private ResourcePackManagerImpl packManager;
     private ServerVersion.Version serverVersion;
     private ServerVersion.PackTarget packTarget;
+    private ArmorTracker armorTracker;
     private int armorTaskId = -1;
+    private int reconcileTaskId = -1;
 
     @Override
     public void onEnable() {
@@ -65,14 +70,22 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         itemFactory = new ItemFactory(this);
         mechanicRegistry = new MechanicRegistryImpl();
         packManager = new ResourcePackManagerImpl(this);
-        packTarget = computePackTarget();
+        armorTracker = new ArmorTracker(this);
+        packTarget = computePackTarget(configValues);
 
-        loadContent();
+        ContentRegistry loaded = buildRegistry();
+        if (loaded == null) {
+            getLogger().severe("Could not load any content; disabling.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        contentRegistry = loaded;
 
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
         getServer().getPluginManager().registerEvents(new UseListener(this), this);
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
         getServer().getPluginManager().registerEvents(new FurnitureListener(this), this);
+        getServer().getPluginManager().registerEvents(new ArmorListener(this), this);
 
         ItemMakerCommand command = new ItemMakerCommand(this);
         getCommand("andreaitemmaker").setExecutor(command);
@@ -83,7 +96,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         AndreaitemmakerAPI.init(this);
 
         getLogger().info("Enabled with " + contentRegistry.getAll().size() + " content entries, "
-                + "resource pack " + (packManager.isGenerated() ? "ready" : "NOT generated"));
+                + "resource pack generation " + (packManager.isGenerated() ? "ready" : "started in the background"));
     }
 
     @Override
@@ -92,75 +105,113 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         if (packManager != null) {
             packManager.shutdown();
         }
-        if (armorTaskId >= 0) {
-            Bukkit.getScheduler().cancelTask(armorTaskId);
-            armorTaskId = -1;
-        }
+        cancelTasks();
     }
 
-    /** Full reload: config, content, pack. Called by /andreaitemmaker reload and the API. */
+    /**
+     * Full reload: config, content, pack. Transactional: everything is loaded and validated
+     * into fresh objects first, and only swapped in once it succeeded. If anything fails, the
+     * previous working config/registry stays active and the previous pack keeps being served.
+     */
     public void reloadAll() {
-        configValues = PluginConfig.from(new ConfigMigrator(this).loadMainConfig());
-        packTarget = computePackTarget();
+        PluginConfig newConfig = PluginConfig.from(new ConfigMigrator(this).loadMainConfig());
+        ServerVersion.PackTarget newTarget = computePackTarget(newConfig);
         createAssetFolders();
-        loadContent();
-        stopArmorTask();
+        ContentRegistry newRegistry = buildRegistry();
+        if (newRegistry == null) {
+            getLogger().severe("Reload aborted: content could not be loaded; keeping the previous state.");
+            return;
+        }
+        // Everything loaded fine: swap atomically (reads see either the old or the new state).
+        this.configValues = newConfig;
+        this.packTarget = newTarget;
+        this.contentRegistry = newRegistry;
+
+        cancelTasks();
         startArmorTask();
         boolean ok = packManager.generate();
-        getLogger().info("Reload finished, pack " + (ok ? "generated" : "FAILED"));
-        if (ok && configValues.pack.resendOnReload) {
-            packManager.sendToAll();
-        }
+        getLogger().info("Reload finished with " + newRegistry.getAll().size() + " content entries; "
+                + "pack generation " + (ok ? "started" : "FAILED to start"));
     }
 
-    private void loadContent() {
-        contentRegistry.clear();
-        ContentLoader.LoadResult result = new ContentLoader(this).load();
-        for (CustomItem item : result.items) {
-            contentRegistry.add(item);
-        }
-        // Cross-check mechanic references so typos surface at load time.
-        for (CustomItem item : contentRegistry.getAll()) {
-            for (String mechId : item.getMechanics().keySet()) {
-                if (mechanicRegistry.get(mechId) == null) {
-                    getLogger().warning("Item '" + item.getId() + "' references unknown mechanic '"
-                            + mechId + "' (registered: " + mechanicRegistry.getAll().stream()
-                            .map(ItemMechanic::getId).sorted().toList() + ")");
+    /**
+     * Load content into a fresh registry without touching the current one.
+     *
+     * @return the new registry, or null when loading failed catastrophically
+     */
+    private ContentRegistry buildRegistry() {
+        try {
+            ContentLoader.LoadResult result = new ContentLoader(this).load();
+            ContentRegistry registry = ContentRegistry.build(result.items);
+            // Cross-check mechanic references so typos surface at load time.
+            for (CustomItem item : registry.getAll()) {
+                for (String mechId : item.getMechanics().keySet()) {
+                    if (mechanicRegistry.get(mechId) == null) {
+                        getLogger().warning("Item '" + item.getId() + "' references unknown mechanic '"
+                                + mechId + "' (registered: " + mechanicRegistry.getAll().stream()
+                                .map(ItemMechanic::getId).sorted().toList() + ")");
+                    }
                 }
             }
+            getLogger().info("Loaded " + result.loaded + " content entries"
+                    + (result.errors.isEmpty() ? "" : ", " + result.errors.size()
+                    + " entries skipped (see warnings above)"));
+            return registry;
+        } catch (Exception e) {
+            getLogger().severe("Failed to load content: " + e);
+            return null;
         }
-        getLogger().info("Loaded " + result.loaded + " content entries"
-                + (result.errors.isEmpty() ? "" : ", " + result.errors.size() + " entries skipped (see warnings above)"));
     }
 
     private void startArmorTask() {
-        int interval = configValues.armorTickSeconds * 20;
+        int interval = Math.max(1, configValues.armorTickSeconds) * 20;
+        // Only players actually wearing custom armor are scanned (see ArmorTracker).
         armorTaskId = Bukkit.getScheduler().runTaskTimer(this, () -> {
+            for (UUID uuid : armorTracker.snapshot()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player == null || !player.isOnline()) {
+                    armorTracker.remove(uuid);
+                    continue;
+                }
+                tickArmor(player);
+            }
+        }, 40L, interval).getTaskId();
+        // Slow belt-and-braces reconciliation in case a plugin changed armor slots outside
+        // of events (e.g. setItem direct calls).
+        reconcileTaskId = Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
-                for (ItemStack stack : player.getInventory().getArmorContents()) {
-                    CustomItem item = contentRegistry.getItemByStack(stack);
-                    if (item == null) {
-                        continue;
-                    }
-                    for (String mechId : item.getMechanics().keySet()) {
-                        ItemMechanic mechanic = mechanicRegistry.get(mechId);
-                        if (mechanic != null) {
-                            try {
-                                mechanic.onWornTick(player, stack, item);
-                            } catch (Exception e) {
-                                getLogger().warning("Mechanic '" + mechId + "' failed on worn tick: " + e);
-                            }
-                        }
+                armorTracker.recompute(player);
+            }
+        }, 600L, 600L).getTaskId();
+    }
+
+    private void tickArmor(Player player) {
+        for (ItemStack stack : player.getInventory().getArmorContents()) {
+            CustomItem item = contentRegistry.getItemByStack(stack);
+            if (item == null) {
+                continue;
+            }
+            for (String mechId : item.getMechanics().keySet()) {
+                ItemMechanic mechanic = mechanicRegistry.get(mechId);
+                if (mechanic != null) {
+                    try {
+                        mechanic.onWornTick(player, stack, item);
+                    } catch (Exception e) {
+                        getLogger().warning("Mechanic '" + mechId + "' failed on worn tick: " + e);
                     }
                 }
             }
-        }, 40L, interval).getTaskId();
+        }
     }
 
-    private void stopArmorTask() {
+    private void cancelTasks() {
         if (armorTaskId >= 0) {
             Bukkit.getScheduler().cancelTask(armorTaskId);
             armorTaskId = -1;
+        }
+        if (reconcileTaskId >= 0) {
+            Bukkit.getScheduler().cancelTask(reconcileTaskId);
+            reconcileTaskId = -1;
         }
     }
 
@@ -196,8 +247,8 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         }
     }
 
-    private ServerVersion.PackTarget computePackTarget() {
-        Integer override = configValues.pack.formatOverride;
+    private ServerVersion.PackTarget computePackTarget(PluginConfig cfg) {
+        Integer override = cfg.pack.formatOverride;
         if (override != null) {
             boolean range = ServerVersion.usesRangeFormat(serverVersion);
             ServerVersion.Mode mode = serverVersion.isAtLeast(1, 21, 2)
@@ -255,6 +306,10 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
 
     public ResourcePackManagerImpl getPackManager() {
         return packManager;
+    }
+
+    public ArmorTracker getArmorTracker() {
+        return armorTracker;
     }
 
     public ServerVersion.Version getServerVersion() {

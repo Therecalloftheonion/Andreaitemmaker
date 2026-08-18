@@ -7,6 +7,7 @@ import com.andreaitemmaker.api.CustomFurniture;
 import com.andreaitemmaker.api.CustomItem;
 import com.andreaitemmaker.api.CustomItemType;
 import com.andreaitemmaker.content.ItemFactory;
+import com.andreaitemmaker.util.AssetPaths;
 import com.andreaitemmaker.util.Chat;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -291,6 +292,10 @@ public final class ContentLoader {
                 return t;
             }
             if (t.endsWith(".png")) {
+                if (!AssetPaths.isSafeAssetPath(t)) {
+                    throw new ConfigException(fileName, "unsafe texture path '" + t
+                            + "' (must be a relative path inside assets/textures/)");
+                }
                 return t;
             }
             throw new ConfigException(fileName, "unsupported texture '" + t + "' "
@@ -324,6 +329,10 @@ public final class ContentLoader {
         }
         if (!model.endsWith(".json")) {
             throw new ConfigException(fileName, "model must be a path to a .json file inside assets/models/");
+        }
+        if (!AssetPaths.isSafeAssetPath(model)) {
+            throw new ConfigException(fileName, "unsafe model path '" + model
+                    + "' (must be a relative path inside assets/models/)");
         }
         return model;
     }

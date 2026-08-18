@@ -3,6 +3,7 @@ package com.andreaitemmaker.pack;
 import com.andreaitemmaker.api.CustomBlock;
 import com.andreaitemmaker.api.CustomItem;
 import com.andreaitemmaker.api.CustomItemType;
+import com.andreaitemmaker.util.AssetPaths;
 import com.andreaitemmaker.util.Json;
 import com.andreaitemmaker.util.PngWriter;
 import com.andreaitemmaker.util.ServerVersion;
@@ -19,12 +20,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -35,7 +34,7 @@ import java.util.zip.ZipOutputStream;
  * hashing and uploading) and/or an unzipped {@code pack/} folder (so admins can host it
  * manually when the built-in HTTP server is unreachable).
  *
- * <p>Two layouts are produced depending on the server version:
+ * <p>Version-specific behavior lives in the {@link PackLayout} strategies:
  * <ul>
  *   <li><b>Legacy</b> (&lt; 1.21.2): items are wired with CustomModelData predicates patched into
  *       {@code assets/minecraft/models/item/&lt;base&gt;.json}.</li>
@@ -46,42 +45,11 @@ import java.util.zip.ZipOutputStream;
  * Custom blocks additionally override {@code assets/minecraft/blockstates/&lt;base&gt;.json}
  * (one base block per custom block, all versions). Armor gets worn-layer textures and, on
  * modern versions, an equipment asset wired through the equippable component.
+ *
+ * <p>This class is pure file/IO work with no Bukkit API access, so it is safe to run on a
+ * background thread.
  */
 public final class PackGenerator {
-
-    private static final Set<String> HANDHELD_BASES = Set.of(
-            "netherite_sword", "diamond_sword", "iron_sword", "golden_sword", "stone_sword", "wooden_sword",
-            "netherite_axe", "diamond_axe", "iron_axe", "golden_axe", "stone_axe", "wooden_axe",
-            "netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "golden_pickaxe", "stone_pickaxe", "wooden_pickaxe",
-            "netherite_shovel", "diamond_shovel", "iron_shovel", "golden_shovel", "stone_shovel", "wooden_shovel",
-            "netherite_hoe", "diamond_hoe", "iron_hoe", "golden_hoe", "stone_hoe", "wooden_hoe");
-
-    private static final Set<String> GENERATED_BASES = Set.of(
-            "stick", "paper", "diamond", "emerald", "iron_ingot", "gold_ingot", "netherite_ingot", "copper_ingot",
-            "iron_nugget", "gold_nugget", "coal", "charcoal", "flint", "feather", "string", "leather", "bone",
-            "blaze_rod", "ender_pearl", "snowball", "egg", "arrow", "apple", "golden_apple", "bread",
-            "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_cod", "cooked_salmon", "carrot", "potato",
-            "cookie", "melon_slice", "sweet_berries", "glow_berries", "pumpkin_pie", "cake",
-            "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
-            "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots",
-            "golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots",
-            "netherite_helmet", "netherite_chestplate", "netherite_leggings", "netherite_boots",
-            "leather_helmet", "leather_chestplate", "leather_leggings", "leather_boots",
-            "chainmail_helmet", "chainmail_chestplate", "chainmail_leggings", "chainmail_boots", "turtle_helmet",
-            "quartz", "redstone", "lapis_lazuli", "amethyst_shard", "echo_shard", "nether_star",
-            "prismarine_shard", "prismarine_crystals", "phantom_membrane", "rabbit_foot", "ghast_tear",
-            "blaze_powder", "gunpowder", "sugar", "slime_ball", "clay_ball", "brick", "nether_brick");
-
-    private static final Map<String, String> BASE_PARENT = new HashMap<>();
-
-    static {
-        for (String name : HANDHELD_BASES) {
-            BASE_PARENT.put(name, "minecraft:item/handheld");
-        }
-        for (String name : GENERATED_BASES) {
-            BASE_PARENT.put(name, "minecraft:item/generated");
-        }
-    }
 
     /** Everything the generator needs. */
     public record Context(
@@ -105,29 +73,23 @@ public final class PackGenerator {
     public static Map<String, byte[]> buildEntries(Context ctx) throws IOException {
         Map<String, byte[]> entries = new LinkedHashMap<>();
         putString(entries, "pack.mcmeta", packMcmeta(ctx));
-        put(entries, "pack.png", packIcon());        Map<Material, List<CustomItem>> legacyGroups = new LinkedHashMap<>();
-        Set<String> writtenItemTextures = new java.util.HashSet<>();
-        Set<String> writtenItemModels = new java.util.HashSet<>();
-        for (CustomItem item : ctx.items()) {
-            // Every item gets a models/item/<id>.json entry (generated or imported).
-            writtenItemModels.add(item.getId());
-        }
+        put(entries, "pack.png", packIcon());
+        Map<Material, List<CustomItem>> legacyGroups = new LinkedHashMap<>();
+        PackLayout layout = PackLayout.forTarget(ctx.target());
 
         for (CustomItem item : ctx.items()) {
-            writeItemAssets(entries, ctx, item, legacyGroups, writtenItemTextures);
+            writeItemAssets(entries, ctx, item, layout, legacyGroups);
             if (item.getType().isArmor()) {
-                writeArmorAssets(entries, ctx, item);
+                writeArmorAssets(entries, ctx, item, layout);
             }
             if (item instanceof CustomBlock block) {
                 writeBlockAssets(entries, ctx, block);
             }
         }
 
-        if (ctx.target().mode() == ServerVersion.Mode.LEGACY) {
-            writeLegacyOverrides(entries, ctx, legacyGroups);
-        }
-        copyImportedTextures(entries, ctx, writtenItemTextures);
-        copyImportedModels(entries, ctx, writtenItemModels);
+        layout.writeLegacyOverrides(entries, ctx, legacyGroups);
+        copyImportedTextures(entries, ctx);
+        copyImportedModels(entries, ctx);
         return entries;
     }
 
@@ -199,15 +161,13 @@ public final class PackGenerator {
     // ---- per-item assets ----
 
     private static void writeItemAssets(Map<String, byte[]> entries, Context ctx, CustomItem item,
-                                        Map<Material, List<CustomItem>> legacyGroups,
-                                        Set<String> writtenItemTextures) throws IOException {
+                                        PackLayout layout, Map<Material, List<CustomItem>> legacyGroups) throws IOException {
         String ns = ctx.namespace();
         String id = item.getId();
         // With an imported model and no explicit texture, the texture is the model's own PNG
         // from assets/textures/ (copied below). Don't generate a placeholder over that path.
         if (item.getModelFile() == null || item.getTextureSpec() != null) {
             put(entries, "assets/" + ns + "/textures/item/" + id + ".png", itemTexturePng(ctx, item));
-            writtenItemTextures.add(id);
         }
         String modelJson;
         if (item.getModelFile() != null) {
@@ -223,12 +183,7 @@ public final class PackGenerator {
             // Blocks write their own item model (parented to the block model) in writeBlockAssets.
             putString(entries, "assets/" + ns + "/models/item/" + id + ".json", modelJson);
         }
-        if (ctx.target().mode() == ServerVersion.Mode.MODERN) {
-            putString(entries, "assets/" + ns + "/items/" + id + ".json",
-                    Json.obj("model", Map.of("type", "minecraft:model", "model", ns + ":item/" + id)));
-        } else {
-            legacyGroups.computeIfAbsent(item.getMaterial(), k -> new ArrayList<>()).add(item);
-        }
+        layout.writeItemDefinition(entries, ctx, item, legacyGroups);
     }
 
     private static void writeBlockAssets(Map<String, byte[]> entries, Context ctx, CustomBlock block) throws IOException {
@@ -248,87 +203,72 @@ public final class PackGenerator {
                 Json.obj("variants", Map.of("", Map.of("model", ns + ":block/" + id))));
     }
 
-    private static void writeArmorAssets(Map<String, byte[]> entries, Context ctx, CustomItem item) throws IOException {
+    private static void writeArmorAssets(Map<String, byte[]> entries, Context ctx, CustomItem item,
+                                         PackLayout layout) throws IOException {
         String ns = ctx.namespace();
         String id = item.getId();
         byte[] layer1 = armorLayerPng(ctx, item, true);
         byte[] layer2 = armorLayerPng(ctx, item, false);
         put(entries, "assets/" + ns + "/textures/models/armor/" + id + "_layer_1.png", layer1);
         put(entries, "assets/" + ns + "/textures/models/armor/" + id + "_layer_2.png", layer2);
-        if (ctx.target().mode() == ServerVersion.Mode.MODERN) {
-            if (ctx.target().format() >= 75) {
-                // 1.21.11+: textures moved under textures/entity/equipment/...
-                put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid/" + id + ".png", layer1);
-                put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid_leggings/" + id + ".png", layer2);
-                putString(entries, "assets/" + ns + "/equipment/" + id + ".json", Json.obj("layers", Map.of(
-                        "humanoid", List.of(Map.of("texture", ns + ":" + id)),
-                        "humanoid_leggings", List.of(Map.of("texture", ns + ":" + id)))));
-            } else {
-                putString(entries, "assets/" + ns + "/equipment/" + id + ".json", Json.obj("layers", Map.of(
-                        "humanoid", List.of(ns + ":" + id),
-                        "humanoid_leggings", List.of(ns + ":" + id))));
-            }
-        }
-    }
-
-    // ---- legacy (1.20.5 - 1.21.1) overrides ----
-
-    private static void writeLegacyOverrides(Map<String, byte[]> entries, Context ctx,
-                                             Map<Material, List<CustomItem>> groups) {
-        for (Map.Entry<Material, List<CustomItem>> e : groups.entrySet()) {
-            String baseKey = e.getKey().name().toLowerCase(Locale.ROOT);
-            String parent = BASE_PARENT.get(baseKey);
-            if (parent == null) {
-                ctx.logger().warning("Cannot wire custom items on material '" + baseKey
-                        + "' for this server version (no safe base model). Use a material from the documented list.");
-                continue;
-            }
-            List<Object> overrides = new ArrayList<>();
-            for (CustomItem item : e.getValue()) {
-                overrides.add(Map.of(
-                        "predicate", Map.of("custom_model_data", item.getCustomModelData()),
-                        "model", ctx.namespace() + ":item/" + item.getId()));
-            }
-            String json = Json.obj(
-                    "parent", parent,
-                    "textures", Map.of("layer0", "minecraft:item/" + baseKey),
-                    "overrides", overrides);
-            putString(entries, "assets/minecraft/models/item/" + baseKey + ".json", json);
-        }
+        layout.writeArmorAssets(entries, ctx, item, layer1, layer2);
     }
 
     // ---- imported assets ----
 
-    /** Copy every JSON in assets/models/ that isn't an item's own model (e.g. model parents). */
-    private static void copyImportedModels(Map<String, byte[]> entries, Context ctx,
-                                           Set<String> writtenItemModels) throws IOException {
+    /**
+     * Copy every JSON in assets/models/ that isn't already part of the pack (item models,
+     * parent models). Only the flat files are imported; anything that would overwrite an
+     * entry the generator already wrote is skipped. JSON files are validated before being
+     * injected into the pack.
+     */
+    private static void copyImportedModels(Map<String, byte[]> entries, Context ctx) throws IOException {
+        if (ctx.dataFolder() == null) {
+            return;
+        }
         File models = new File(ctx.dataFolder(), "assets/models");
         File[] files = models.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".json"));
         if (files == null) {
             return;
         }
+        java.util.Arrays.sort(files);
         for (File f : files) {
-            String base = f.getName().substring(0, f.getName().length() - 5);
-            if (writtenItemModels.contains(base)) {
-                continue; // already written as this item's model
+            String target = "assets/" + ctx.namespace() + "/models/item/" + f.getName();
+            if (entries.containsKey(target)) {
+                continue; // already written (an item's own model)
             }
-            put(entries, "assets/" + ctx.namespace() + "/models/item/" + f.getName(), Files.readAllBytes(f.toPath()));
+            byte[] bytes = Files.readAllBytes(f.toPath());
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (!Json.looksValid(content)) {
+                ctx.logger().warning("Skipping invalid model '" + f.getName()
+                        + "' (not a valid JSON object)");
+                continue;
+            }
+            put(entries, target, bytes);
         }
     }
 
-    private static void copyImportedTextures(Map<String, byte[]> entries, Context ctx,
-                                             Set<String> writtenItemTextures) throws IOException {
+    /**
+     * Copy every PNG (and its optional {@code .png.mcmeta} animation) in assets/textures/
+     * that isn't already part of the pack. Duplicate basenames cannot silently shadow each
+     * other: the first file wins and conflicts are logged.
+     */
+    private static void copyImportedTextures(Map<String, byte[]> entries, Context ctx) throws IOException {
+        if (ctx.dataFolder() == null) {
+            return;
+        }
         File textures = new File(ctx.dataFolder(), "assets/textures");
         File[] files = textures.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".png"));
         if (files == null) {
             return;
         }
+        java.util.Arrays.sort(files);
         for (File f : files) {
-            String base = f.getName().substring(0, f.getName().length() - 4);
-            if (writtenItemTextures.contains(base)) {
-                continue; // already written as this item's texture
+            String target = "assets/" + ctx.namespace() + "/textures/item/" + f.getName();
+            if (entries.containsKey(target)) {
+                continue; // already written (an item's own texture)
             }
-            put(entries, "assets/" + ctx.namespace() + "/textures/item/" + f.getName(), Files.readAllBytes(f.toPath()));
+            put(entries, target, Files.readAllBytes(f.toPath()));
             // Animated textures: copy the matching .png.mcmeta file next to the texture.
             File mcmeta = new File(textures, f.getName() + ".mcmeta");
             if (mcmeta.isFile()) {
@@ -342,29 +282,29 @@ public final class PackGenerator {
 
     private static byte[] itemTexturePng(Context ctx, CustomItem item) throws IOException {
         String spec = item.getTextureSpec();
-        if (spec != null && spec.startsWith("assets/")) {
-            File file = new File(ctx.dataFolder(), spec);
-            if (!file.isFile()) {
+        if (spec != null && AssetPaths.isSafeAssetPath(spec)) {
+            File file = AssetPaths.resolve(ctx.dataFolder(), spec);
+            if (file == null || !file.isFile()) {
                 ctx.logger().warning("Texture file '" + spec + "' not found for '" + item.getId()
-                        + "' (looked at " + file.getAbsolutePath() + "), using a generated texture");
+                        + "', using a generated texture");
             } else {
                 return scalePng(file, ctx.textureSize(), ctx.textureSize());
             }
         }
-        TexSpec tex = resolveSpec(spec != null ? spec : defaultSpec(item.getId()));
+        TexSpec tex = resolveSpec(ctx, spec != null ? spec : defaultSpec(item.getId()));
         int[] px = TextureGenerator.generate(ctx.textureSize(), tex.pattern(), tex.c1(), tex.c2(), tex.outline());
         return PngWriter.write(ctx.textureSize(), ctx.textureSize(), px);
     }
 
     private static byte[] armorLayerPng(Context ctx, CustomItem item, boolean upper) throws IOException {
         String spec = item.getTextureSpec();
-        if (spec != null && spec.startsWith("assets/")) {
-            File file = new File(ctx.dataFolder(), spec);
-            if (file.isFile()) {
+        if (spec != null && AssetPaths.isSafeAssetPath(spec)) {
+            File file = AssetPaths.resolve(ctx.dataFolder(), spec);
+            if (file != null && file.isFile()) {
                 return scalePng(file, 64, 32);
             }
         }
-        TexSpec tex = resolveSpec(spec != null ? spec : defaultSpec(item.getId()));
+        TexSpec tex = resolveSpec(ctx, spec != null ? spec : defaultSpec(item.getId()));
         int[] px = TextureGenerator.armorLayer(tex.pattern(), tex.c1(), tex.c2(), tex.outline());
         return PngWriter.write(64, 32, px);
     }
@@ -388,23 +328,31 @@ public final class PackGenerator {
         return PngWriter.write(w, h, scaled.getRGB(0, 0, w, h, null, 0, w));
     }
 
-    private static TexSpec resolveSpec(String spec) {
+    private static TexSpec resolveSpec(Context ctx, String spec) {
         String[] parts = spec.split("\\|");
         TextureGenerator.Pattern pattern = TextureGenerator.Pattern.GRADIENT;
         String color = parts.length > 1 ? parts[1] : parts[0];
         String color2 = parts.length > 2 && !parts[2].isEmpty() ? parts[2] : color;
         boolean outline = parts.length <= 3 || Boolean.parseBoolean(parts[3]);
-        if (parts.length > 0) {
+        // A bare hex color ("#4f7cff") is a solid texture; only named patterns are parsed.
+        if (parts.length > 0 && !parts[0].startsWith("#")) {
             try {
                 pattern = TextureGenerator.Pattern.valueOf(parts[0].toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ignored) {
+            } catch (IllegalArgumentException e) {
+                ctx.logger().warning("Unknown texture pattern '" + parts[0] + "', using SOLID");
                 pattern = TextureGenerator.Pattern.SOLID;
             }
         }
-        return new TexSpec(pattern,
-                TextureGenerator.parseColor(color),
-                TextureGenerator.parseColor(color2),
-                outline);
+        try {
+            return new TexSpec(pattern,
+                    TextureGenerator.parseColor(color),
+                    TextureGenerator.parseColor(color2),
+                    outline);
+        } catch (IllegalArgumentException e) {
+            ctx.logger().warning("Invalid texture colors in '" + spec + "', using a default gradient");
+            int[] defaults = defaultColors(spec);
+            return new TexSpec(pattern, defaults[0], defaults[1], outline);
+        }
     }
 
     /** Pick a deterministic pleasant gradient based on the item id. */
@@ -413,6 +361,11 @@ public final class PackGenerator {
         int c1 = hslToRgb(hue, 0.55f, 0.55f);
         int c2 = hslToRgb((hue + 40) % 360, 0.60f, 0.30f);
         return "gradient|" + toHex(c1) + "|" + toHex(c2) + "|true";
+    }
+
+    private static int[] defaultColors(String spec) {
+        int hue = (spec.hashCode() & 0x7fffffff) % 360;
+        return new int[]{hslToRgb(hue, 0.55f, 0.55f), hslToRgb((hue + 40) % 360, 0.60f, 0.30f)};
     }
 
     private static int hslToRgb(float h, float s, float l) {
@@ -445,29 +398,35 @@ public final class PackGenerator {
 
     /** Read an imported model, falling back to a generated model (with a warning) when missing. */
     private static String readModelOrFallback(Context ctx, CustomItem item) {
-        File file = new File(ctx.dataFolder(), item.getModelFile());
-        if (file.isFile()) {
+        File file = AssetPaths.resolve(ctx.dataFolder(), item.getModelFile());
+        if (file != null && file.isFile()) {
             try {
-                return Files.readString(file.toPath(), StandardCharsets.UTF_8);
+                String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+                if (!Json.looksValid(content)) {
+                    ctx.logger().warning("Model file '" + item.getModelFile() + "' for '" + item.getId()
+                            + "' is not a valid JSON object, using a generated model");
+                } else {
+                    return content;
+                }
             } catch (IOException e) {
                 ctx.logger().warning("Could not read model '" + item.getModelFile() + "': " + e.getMessage());
             }
         } else {
             ctx.logger().warning("Model file '" + item.getModelFile() + "' not found for '" + item.getId()
-                    + "' (looked at " + file.getAbsolutePath() + "), using a generated model");
+                    + "' (looked at " + file + "), using a generated model");
         }
         return Json.obj("parent", item.getType() == CustomItemType.WEAPON
                 ? "minecraft:item/handheld" : "minecraft:item/generated",
                 "textures", Map.of("layer0", ctx.namespace() + ":item/" + item.getId()));
     }
 
-    // ---- entry helpers ----
+    // ---- entry helpers (package-visible for the PackLayout strategies) ----
 
-    private static void put(Map<String, byte[]> entries, String path, byte[] data) {
+    static void put(Map<String, byte[]> entries, String path, byte[] data) {
         entries.put(path, data);
     }
 
-    private static void putString(Map<String, byte[]> entries, String path, String content) {
+    static void putString(Map<String, byte[]> entries, String path, String content) {
         entries.put(path, content.getBytes(StandardCharsets.UTF_8));
     }
 }

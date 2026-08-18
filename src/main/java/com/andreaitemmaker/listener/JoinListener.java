@@ -22,9 +22,14 @@ public final class JoinListener implements Listener {
         if (!plugin.getConfigValues().pack.sendOnJoin) {
             return;
         }
-        // Small delay so the join packet burst has settled.
-        Bukkit.getScheduler().runTaskLater(plugin,
-                () -> plugin.getPackManager().sendTo(event.getPlayer()), 40L);
+        // Small delay so the join packet burst has settled. Skip players who already got
+        // this pack (e.g. from a generation that finished while they were joining).
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            var manager = plugin.getPackManager();
+            if (!manager.wasSentTo(event.getPlayer())) {
+                manager.sendTo(event.getPlayer());
+            }
+        }, 40L);
     }
 
     @EventHandler

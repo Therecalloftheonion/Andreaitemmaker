@@ -25,6 +25,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -191,6 +192,93 @@ class PackGeneratorTest {
         byte[] data = entries.get(path);
         assertNotNull(data, "missing entry " + path);
         assertNotNull(ImageIO.read(new ByteArrayInputStream(data)), "entry is not a valid PNG: " + path);
+    }
+
+    @Test
+    void strayModelCannotShadowGeneratedModel(@TempDir Path tempDir) throws Exception {
+        // A stray file whose basename matches an item id must NOT overwrite the generated model.
+        Path models = tempDir.resolve("assets/models");
+        Files.createDirectories(models);
+        Files.writeString(models.resolve("storm_blade.json"),
+                "{\"parent\":\"minecraft:item/handheld\",\"textures\":{\"layer0\":\"evil:thing\"}}");
+        ServerVersion.Version v = ServerVersion.parse("1.21.4-R0.1-SNAPSHOT");
+        PackGenerator.Context ctx = new PackGenerator.Context("itemmaker", ServerVersion.targetFor(v), v,
+                16, "test", tempDir.toFile(), List.of(SWORD), LOG);
+        Map<String, byte[]> entries = PackGenerator.buildEntries(ctx);
+        String model = new String(entries.get("assets/itemmaker/models/item/storm_blade.json"));
+        assertTrue(model.contains("itemmaker:item/storm_blade"), "generated model must win over stray file");
+        assertFalse(model.contains("evil:thing"));
+    }
+
+    @Test
+    void invalidImportedModelIsSkipped(@TempDir Path tempDir) throws Exception {
+        Path models = tempDir.resolve("assets/models");
+        Files.createDirectories(models);
+        Files.writeString(models.resolve("broken.json"), "{ this is not json");
+        ServerVersion.Version v = ServerVersion.parse("1.21.4-R0.1-SNAPSHOT");
+        PackGenerator.Context ctx = new PackGenerator.Context("itemmaker", ServerVersion.targetFor(v), v,
+                16, "test", tempDir.toFile(), List.of(SWORD), LOG);
+        Map<String, byte[]> entries = PackGenerator.buildEntries(ctx);
+        assertFalse(entries.containsKey("assets/itemmaker/models/item/broken.json"),
+                "invalid JSON must not be injected into the pack");
+    }
+
+    @Test
+    void escapingModelPathFallsBackToGenerated(@TempDir Path tempDir) throws Exception {
+        CustomItem evil = new CustomItem("evil_blade", CustomItemType.WEAPON, Material.DIAMOND_SWORD,
+                "Evil", List.of(), 3001, 1, Map.of(), Map.of(), false, false, null,
+                "../outside.json", Map.of());
+        ServerVersion.Version v = ServerVersion.parse("1.21.4-R0.1-SNAPSHOT");
+        PackGenerator.Context ctx = new PackGenerator.Context("itemmaker", ServerVersion.targetFor(v), v,
+                16, "test", tempDir.toFile(), List.of(evil), LOG);
+        Map<String, byte[]> entries = PackGenerator.buildEntries(ctx);
+        String model = new String(entries.get("assets/itemmaker/models/item/evil_blade.json"));
+        assertTrue(model.contains("itemmaker:item/evil_blade"), "must fall back to a generated model");
+    }
+
+    @Test
+    void strayTextureCannotShadowItemTexture(@TempDir Path tempDir) throws Exception {
+        // Item has an explicit texture; a stray PNG with the item's basename must not
+        // overwrite the item's own (scaled) texture entry.
+        Path textures = tempDir.resolve("assets/textures");
+        Files.createDirectories(textures);
+        byte[] stray = new byte[]{1, 2, 3, 4}; // not even a PNG
+        Files.write(textures.resolve("storm_blade.png"), stray);
+        CustomItem withTexture = new CustomItem("storm_blade", CustomItemType.WEAPON, Material.DIAMOND_SWORD,
+                "Storm Blade", List.of(), 1001, 1, Map.of(), Map.of(), false, false,
+                "#ff0000", null, Map.of());
+        ServerVersion.Version v = ServerVersion.parse("1.21.4-R0.1-SNAPSHOT");
+        PackGenerator.Context ctx = new PackGenerator.Context("itemmaker", ServerVersion.targetFor(v), v,
+                16, "test", tempDir.toFile(), List.of(withTexture), LOG);
+        Map<String, byte[]> entries = PackGenerator.buildEntries(ctx);
+        byte[] written = entries.get("assets/itemmaker/textures/item/storm_blade.png");
+        assertNotNull(written);
+        assertTrue(!java.util.Arrays.equals(stray, written), "item texture must win over stray file");
+    }
+
+    @Test
+    void duplicateImportedTextureCopyIsIdempotent(@TempDir Path tempDir) throws Exception {
+        // A stray PNG copied once must not duplicate entries; two items sharing the same
+        // imported texture still produce exactly one pack entry.
+        Path textures = tempDir.resolve("assets/textures");
+        Files.createDirectories(textures);
+        byte[] png = com.andreaitemmaker.util.PngWriter.write(16, 16, new int[16 * 16]);
+        Files.write(textures.resolve("shared.png"), png);
+        CustomItem one = new CustomItem("one", CustomItemType.WEAPON, Material.DIAMOND_SWORD,
+                "One", List.of(), 1001, 1, Map.of(), Map.of(), false, false, null,
+                "assets/models/one.json", Map.of());
+        CustomItem two = new CustomItem("two", CustomItemType.WEAPON, Material.DIAMOND_SWORD,
+                "Two", List.of(), 1002, 1, Map.of(), Map.of(), false, false, null,
+                "assets/models/two.json", Map.of());
+        ServerVersion.Version v = ServerVersion.parse("1.21.4-R0.1-SNAPSHOT");
+        PackGenerator.Context ctx = new PackGenerator.Context("itemmaker", ServerVersion.targetFor(v), v,
+                16, "test", tempDir.toFile(), List.of(one, two), LOG);
+        Map<String, byte[]> entries = PackGenerator.buildEntries(ctx);
+        assertNotNull(entries.get("assets/itemmaker/textures/item/shared.png"));
+        // The shared texture appears exactly once.
+        long count = entries.keySet().stream()
+                .filter(k -> k.equals("assets/itemmaker/textures/item/shared.png")).count();
+        assertEquals(1, count);
     }
 
     private static Map<String, byte[]> readZip(byte[] zip) throws IOException {

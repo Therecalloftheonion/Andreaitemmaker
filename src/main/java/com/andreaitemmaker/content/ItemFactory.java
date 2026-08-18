@@ -189,6 +189,7 @@ public final class ItemFactory {
             }
             setMaxStackSizeMethod.invoke(meta, max);
         } catch (ReflectiveOperationException ignored) {
+            // Feature not present on this server version; the vanilla stack size applies.
         }
     }
 
@@ -199,6 +200,7 @@ public final class ItemFactory {
             }
             setGlintMethod.invoke(meta, true);
         } catch (ReflectiveOperationException ignored) {
+            // Feature not present on this server version; the vanilla glint behavior applies.
         }
     }
 
