@@ -53,7 +53,7 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 | Requirement | Minimum |
 | --- | --- |
 | Java | 17+ (servers on 1.20.5+ already run Java 21) |
-| Server | Spigot or Paper 1.20.5 or newer (tested through 26.2) |
+| Server | Spigot or Paper 1.20.5 or newer (tested through with 1.21.5) |
 
 ## 🧩 Content
 
