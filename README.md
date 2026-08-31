@@ -7,7 +7,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.5%20→%2026.2+-blue)
 ![Spigot](https://img.shields.io/badge/Spigot%20%2F%20Paper-supported-brightgreen)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
-![Version](https://img.shields.io/badge/version-2.0.0--beta-informational)
+![Version](https://img.shields.io/badge/version-1.0.0-informational)
 ![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen)
 ![Vibe](https://img.shields.io/badge/vibe-coded-ff69b4)
 
@@ -48,7 +48,7 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 ./mvnw package        # Windows: mvnw.cmd package
 ```
 
-1. Drop `target/Andreaitemmaker-2.0.0-beta.jar` into your server's `plugins/` folder.
+1. Drop `target/Andreaitemmaker-1.0.0.jar` into your server's `plugins/` folder.
 2. Restart. The plugin creates `plugins/Andreaitemmaker/` with `config.yml` and example content.
 3. Give yourself something:
    ```
