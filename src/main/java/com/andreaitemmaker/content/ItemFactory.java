@@ -204,7 +204,15 @@ public final class ItemFactory {
         }
     }
 
-    /** Wire the equippable component so custom armor renders its own texture when worn (1.21.4+). */
+    /**
+     * Wire the equippable component so custom armor renders from its equipment asset when
+     * worn (1.21.2+). Paper's {@code setModel(NamespacedKey)} is the asset reference: on
+     * 1.21.4+ it maps to the component's {@code asset_id} field (there is no setAssetId
+     * method on current Paper), so it is the one call that must never be skipped. Optional
+     * fields are guarded individually so a missing method on an older Paper build cannot
+     * silently discard the whole wiring (previously an always-throwing setAssetId() call
+     * did exactly that, leaving vanilla armor on the player).
+     */
     private void wireEquippable(ItemMeta meta, CustomItem item, EquipmentSlot slot) {
         try {
             Method getEquippable = ItemMeta.class.getMethod("getEquippable");
@@ -216,17 +224,24 @@ public final class ItemFactory {
             invoke(type, component, "setModel", NamespacedKey.class,
                     new NamespacedKey(plugin.getConfigValues().namespace, item.getId()));
             invoke(type, component, "setSlot", EquipmentSlot.class, slot);
-            invoke(type, component, "setAssetId", NamespacedKey.class,
-                    new NamespacedKey(plugin.getConfigValues().namespace, item.getId()));
-            invoke(type, component, "setDamageOnHurt", boolean.class, false);
-            invoke(type, component, "setDispensable", boolean.class, true);
-            invoke(type, component, "setSwappable", boolean.class, true);
-            invoke(type, component, "setEquipSound", Sound.class, Sound.ITEM_ARMOR_EQUIP_IRON);
+            tryInvoke(type, component, "setDamageOnHurt", boolean.class, false);
+            tryInvoke(type, component, "setDispensable", boolean.class, true);
+            tryInvoke(type, component, "setSwappable", boolean.class, true);
+            tryInvoke(type, component, "setEquipSound", Sound.class, Sound.ITEM_ARMOR_EQUIP_IRON);
             Method setEquippable = ItemMeta.class.getMethod("setEquippable", getEquippable.getReturnType());
             setEquippable.invoke(meta, component);
         } catch (ReflectiveOperationException e) {
             plugin.getLogger().log(Level.FINE,
                     "Could not wire equippable component for " + item.getId() + " (non-Paper server?)", e);
+        }
+    }
+
+    /** Invoke an optional equippable setter; a missing method is fine and is ignored. */
+    private static void tryInvoke(Class<?> type, Object target, String method, Class<?> param, Object arg) {
+        try {
+            invoke(type, target, method, param, arg);
+        } catch (ReflectiveOperationException ignored) {
+            // Optional field not present on this Paper version; the essential model/slot wiring already succeeded.
         }
     }
 

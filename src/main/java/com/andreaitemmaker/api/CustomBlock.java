@@ -27,12 +27,13 @@ public class CustomBlock extends CustomItem {
             boolean unbreakable,
             boolean glow,
             String textureSpec,
+            String armorTextureSpec,
             String modelFile,
             Map<String, Map<String, Object>> mechanics,
             Material baseBlock,
             boolean dropsItem) {
         super(id, CustomItemType.BLOCK, material, displayName, lore, customModelData, maxStackSize,
-                attributes, enchantments, unbreakable, glow, textureSpec, modelFile, mechanics);
+                attributes, enchantments, unbreakable, glow, textureSpec, armorTextureSpec, modelFile, mechanics);
         this.baseBlock = baseBlock;
         this.dropsItem = dropsItem;
     }

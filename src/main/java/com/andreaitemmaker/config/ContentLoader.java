@@ -105,19 +105,22 @@ public final class ContentLoader {
             Map<String, Integer> enchantments = parseEnchantments(yaml);
             boolean unbreakable = yaml.getBoolean("unbreakable", false);
             boolean glow = yaml.getBoolean("glow", false);
-            String texture = parseTexture(yaml, fileName);
+            String texture = parseTexture(yaml, fileName, "texture");
+            // Optional dedicated worn-armor texture (ARMOR items only). Falls back to the
+            // model's own texture / generated layer when absent.
+            String armorTexture = parseTexture(yaml, fileName, "armor-texture");
             String model = parseModel(yaml, fileName);
             Map<String, Map<String, Object>> mechanics = parseMechanics(yaml);
 
             CustomItem item = switch (type) {
                 case BLOCK -> parseBlock(id, yaml, fileName, material, displayName, lore, cmd, maxStack,
-                        attributes, enchantments, unbreakable, glow, texture, model, mechanics, usedBases);
+                        attributes, enchantments, unbreakable, glow, texture, armorTexture, model, mechanics, usedBases);
                 case FURNITURE -> parseFurniture(id, yaml, fileName, material, displayName, lore, cmd, maxStack,
-                        attributes, enchantments, unbreakable, glow, texture, model, mechanics);
+                        attributes, enchantments, unbreakable, glow, texture, armorTexture, model, mechanics);
                 case FOOD -> parseFood(id, yaml, fileName, material, displayName, lore, cmd, maxStack,
-                        attributes, enchantments, unbreakable, glow, texture, model, mechanics);
+                        attributes, enchantments, unbreakable, glow, texture, armorTexture, model, mechanics);
                 default -> new CustomItem(id, type, material, displayName, lore, cmd, maxStack,
-                        attributes, enchantments, unbreakable, glow, texture, model, mechanics);
+                        attributes, enchantments, unbreakable, glow, texture, armorTexture, model, mechanics);
             };
             result.items.add(item);
             result.loaded++;
@@ -133,8 +136,8 @@ public final class ContentLoader {
     private CustomItem parseBlock(String id, YamlConfiguration yaml, String fileName, Material material,
                                   String displayName, List<String> lore, int cmd, int maxStack,
                                   Map<String, Double> attributes, Map<String, Integer> enchantments,
-                                  boolean unbreakable, boolean glow, String texture, String model,
-                                  Map<String, Map<String, Object>> mechanics, Set<Material> usedBases) {
+                                  boolean unbreakable, boolean glow, String texture, String armorTexture,
+                                  String model, Map<String, Map<String, Object>> mechanics, Set<Material> usedBases) {
         Material base = requireMaterial(yaml, "base-block");
         if (!base.isBlock()) {
             throw new ConfigException(fileName, "base-block '" + base + "' is not a block");
@@ -151,14 +154,14 @@ public final class ContentLoader {
         }
         boolean dropsItem = yaml.getBoolean("drops-item", true);
         return new CustomBlock(id, material, displayName, lore, cmd, maxStack, attributes, enchantments,
-                unbreakable, glow, texture, model, mechanics, base, dropsItem);
+                unbreakable, glow, texture, armorTexture, model, mechanics, base, dropsItem);
     }
 
     private CustomItem parseFurniture(String id, YamlConfiguration yaml, String fileName, Material material,
                                       String displayName, List<String> lore, int cmd, int maxStack,
                                       Map<String, Double> attributes, Map<String, Integer> enchantments,
-                                      boolean unbreakable, boolean glow, String texture, String model,
-                                      Map<String, Map<String, Object>> mechanics) {
+                                      boolean unbreakable, boolean glow, String texture, String armorTexture,
+                                      String model, Map<String, Map<String, Object>> mechanics) {
         boolean small = yaml.getBoolean("small", false);
         boolean consumable = yaml.getBoolean("consumable", true);
         boolean dropsItem = yaml.getBoolean("drops-item", true);
@@ -169,15 +172,15 @@ public final class ContentLoader {
         org.bukkit.Sound placeSound = com.andreaitemmaker.util.Sounds.parse(yaml.getString("place-sound", ""));
         org.bukkit.Sound breakSound = com.andreaitemmaker.util.Sounds.parse(yaml.getString("break-sound", ""));
         return new CustomFurniture(id, material, displayName, lore, cmd, maxStack, attributes, enchantments,
-                unbreakable, glow, texture, model, mechanics, small, consumable, dropsItem, offsetY,
+                unbreakable, glow, texture, armorTexture, model, mechanics, small, consumable, dropsItem, offsetY,
                 placeSound, breakSound);
     }
 
     private CustomItem parseFood(String id, YamlConfiguration yaml, String fileName, Material material,
                                  String displayName, List<String> lore, int cmd, int maxStack,
                                  Map<String, Double> attributes, Map<String, Integer> enchantments,
-                                 boolean unbreakable, boolean glow, String texture, String model,
-                                 Map<String, Map<String, Object>> mechanics) {
+                                 boolean unbreakable, boolean glow, String texture, String armorTexture,
+                                 String model, Map<String, Map<String, Object>> mechanics) {
         ConfigurationSection food = yaml.getConfigurationSection("food");
         int hunger = 4;
         float saturation = 6f;
@@ -188,7 +191,7 @@ public final class ContentLoader {
             cooldown = requireInt(food, "cooldown", 0, 60);
         }
         return new CustomFood(id, material, displayName, lore, cmd, maxStack, attributes, enchantments,
-                unbreakable, glow, texture, model, mechanics, hunger, saturation, cooldown);
+                unbreakable, glow, texture, armorTexture, model, mechanics, hunger, saturation, cooldown);
     }
 
     // ---- helpers ----
@@ -276,11 +279,11 @@ public final class ContentLoader {
         return out;
     }
 
-    private String parseTexture(YamlConfiguration yaml, String fileName) {
-        if (!yaml.contains("texture")) {
+    private String parseTexture(YamlConfiguration yaml, String fileName, String key) {
+        if (!yaml.contains(key)) {
             return null;
         }
-        Object v = yaml.get("texture");
+        Object v = yaml.get(key);
         if (v instanceof String s) {
             String t = s.trim();
             if (t.startsWith("#")) {

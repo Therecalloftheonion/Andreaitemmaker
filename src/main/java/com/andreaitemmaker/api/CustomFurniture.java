@@ -31,6 +31,7 @@ public class CustomFurniture extends CustomItem {
             boolean unbreakable,
             boolean glow,
             String textureSpec,
+            String armorTextureSpec,
             String modelFile,
             Map<String, Map<String, Object>> mechanics,
             boolean small,
@@ -40,7 +41,7 @@ public class CustomFurniture extends CustomItem {
             Sound placeSound,
             Sound breakSound) {
         super(id, CustomItemType.FURNITURE, material, displayName, lore, customModelData, maxStackSize,
-                attributes, enchantments, unbreakable, glow, textureSpec, modelFile, mechanics);
+                attributes, enchantments, unbreakable, glow, textureSpec, armorTextureSpec, modelFile, mechanics);
         this.small = small;
         this.consumable = consumable;
         this.dropsItem = dropsItem;

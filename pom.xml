@@ -57,11 +57,13 @@
             <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
+        <!-- Gson is bundled with the Spigot/Paper server (provided at runtime, not shaded).
+             Used to convert Blockbench Bedrock-format models to Java format at pack build time. -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.11.0</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

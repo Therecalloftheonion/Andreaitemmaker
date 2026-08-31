@@ -113,8 +113,35 @@ Drop a Blockbench export into `assets/models/` and reference it:
 model: "assets/models/my_statue.json"
 ```
 
+**Drag-and-drop:** Blockbench **Bedrock Edition** exports work as-is. The plugin detects them
+(`format_version`, `groups`, numeric texture keys) and converts them to the Java format
+automatically — ordering inverted `from`/`to` boxes, renaming `0`/`1` → `layer0`/`layer1`,
+rounding rotation angles to 22.5° steps and stripping Bedrock-only fields. Java exports pass
+through untouched.
+
 Any PNG in `assets/textures/` is copied into the pack (with its `.mcmeta` if it's animated).
 The model's texture path should point at `<namespace>:item/<name>` (default namespace: `itemmaker`).
+
+### Armor: the worn look (`armor-texture:`)
+
+On 1.21.2+ the **worn** piece renders from a flat 2D layer, never from the 3D model. Set the
+worn texture explicitly with a dedicated 64×32 humanoid armor texture:
+
+```yaml
+# items/my_helmet.yml
+type: ARMOR
+material: diamond_helmet
+model: "assets/models/my_helmet.json"     # 3D look in hand / inventory
+armor-texture: "assets/textures/my_layer_1.png"   # 64x32 look when worn
+```
+
+- `texture:` is the **item icon**; `armor-texture:` is the **worn layer** — two different images.
+- Without `armor-texture:`, the plugin auto-detects by convention: `assets/textures/<id>_layer_1.png`
+  / `_layer_2.png`, `<id>_armor_layer_1/2.png`, or a shared set file like
+  `eternal_armor_layer_1.png` / `_2.png` for ids like `eternal_helmet` (layer 1 = helmet/
+  chestplate/boots, layer 2 = leggings).
+- A square UV atlas (16/32/64) is **never** squashed into the worn layer — only flat 64×32
+  textures are used, so the worn piece can't look like garbled atlas regions.
 
 ## ⚙️ Mechanics
 
@@ -233,7 +260,7 @@ version → pack-format mapping, full modern/legacy pack generation, plus:
 | 1.21.2 – 1.21.3 | 42 | `item_model` component + item definitions |
 | 1.21.4 – 1.21.8 | 46 / 55 / 63 / 64 | `item_model` + equipment assets for armor |
 | 1.21.9 – 1.21.10 | 69 | min/max format in `pack.mcmeta` |
-| 1.21.11 | 75 | new equipment texture paths |
+| 1.21.11 | 75 | equipment textures under `textures/entity/equipment/` |
 | 26.1 / 26.2+ | 84 / 88 | latest |
 
 `pack.format` in `config.yml` overrides detection if you ever need to pin it.
@@ -266,7 +293,13 @@ version → pack-format mapping, full modern/legacy pack generation, plus:
 ### Known limitations
 
 - **Custom blocks**: one base block per custom block; the base block's vanilla appearance is replaced for everyone with the pack.
-- **Worn armor textures** render on 1.21.2+ (equippable component). On 1.20.5 – 1.21.1 the armor piece is wearable but shows the vanilla worn texture.
+- **Worn armor** renders from the equipment asset on 1.21.2+ (the `equippable` component with
+  `asset_id`/model wired by Paper). On 1.20.5 – 1.21.1 the piece is wearable but shows the
+  vanilla worn texture. Worn rendering is always the 2D layer texture — the client renderer
+  has no 3D-on-body path, so a 3D model shows in hand/inventory/on the ground while the worn
+  piece uses the layer texture. Point `armor-texture:` at a 64×32 armor texture to control
+  the worn look (see above); without it the plugin auto-detects layer files or uses the
+  model's own texture when it is already a flat 64×32 layer.
 - Items/blocks placed through the API bypass protection plugins (WorldGuard, etc.) — add protections in your own listeners if needed.
 - **Async generation**: `/aitem reload` and `/aitem pack regenerate` report that generation *started* — the pack swap happens in the background and players receive the new pack automatically once it's ready.
 - **External world editors**: replacing a custom block with a *different* material is detected and the stale tag cleaned up; replacing it with the *same* base material is indistinguishable and breaking it will drop the custom item.

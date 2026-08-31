@@ -244,7 +244,9 @@ public final class PackGenerator {
                         + "' (not a valid JSON object)");
                 continue;
             }
-            put(entries, target, bytes);
+            // Drag-and-drop support: auto-convert Blockbench Bedrock exports to Java format.
+            String converted = safeConvert(content, f.getName(), ctx);
+            put(entries, target, converted.getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -297,6 +299,33 @@ public final class PackGenerator {
     }
 
     private static byte[] armorLayerPng(Context ctx, CustomItem item, boolean upper) throws IOException {
+        // 1) Explicit dedicated worn texture (armor-texture: in the config): a .png path or
+        //    a generated pattern. This is the right way to control the worn look — the item
+        //    icon (texture:) and the worn layer are different images.
+        String armorSpec = item.getArmorTextureSpec();
+        if (armorSpec != null) {
+            if (armorSpec.contains("|")) { // generated pattern spec
+                TexSpec tex = resolveSpec(ctx, armorSpec);
+                int[] px = TextureGenerator.armorLayer(tex.pattern(), tex.c1(), tex.c2(), tex.outline());
+                return PngWriter.write(64, 32, px);
+            }
+            if (AssetPaths.isSafeAssetPath(armorSpec)) {
+                File file = AssetPaths.resolve(ctx.dataFolder(), armorSpec);
+                if (file != null && file.isFile()) {
+                    return scalePng(file, 64, 32);
+                }
+                ctx.logger().warning("armor-texture '" + armorSpec + "' not found for '" + item.getId()
+                        + "', using a generated layer");
+            }
+        }
+        // 2) Convention-based auto-detect next to the item: <id>_layer_1/_layer_2.png,
+        //    <id>_armor_layer_1/_2.png, or the set-level <set>_armor_layer_1/_2.png
+        //    (e.g. eternal_armor_layer_1.png for id eternal_helmet).
+        File worn = wornTextureFile(ctx, item, upper);
+        if (worn != null) {
+            return scalePng(worn, 64, 32);
+        }
+        // 3) The item's own texture (texture:) if the user set one — their explicit choice.
         String spec = item.getTextureSpec();
         if (spec != null && AssetPaths.isSafeAssetPath(spec)) {
             File file = AssetPaths.resolve(ctx.dataFolder(), spec);
@@ -304,9 +333,119 @@ public final class PackGenerator {
                 return scalePng(file, 64, 32);
             }
         }
+        // 4) The model's own texture — but only when it is already a flat 64x32 layer.
+        //    A square UV atlas (16/32/64) squashes into garbage when stretched to 64x32,
+        //    so it is never used for the worn layer.
+        if (item.getModelFile() != null) {
+            File modelTex = modelLayerTexture(ctx, item);
+            if (modelTex != null && isArmorLayerSize(modelTex)) {
+                return scalePng(modelTex, 64, 32);
+            }
+        }
+        // 5) Generated pattern layer.
         TexSpec tex = resolveSpec(ctx, spec != null ? spec : defaultSpec(item.getId()));
         int[] px = TextureGenerator.armorLayer(tex.pattern(), tex.c1(), tex.c2(), tex.outline());
         return PngWriter.write(64, 32, px);
+    }
+
+    /**
+     * Find the dedicated worn-armor texture by convention in assets/textures/: for the
+     * upper body (helmet/chestplate/boots) {@code _layer_1}, for leggings {@code _layer_2}.
+     * Tries the per-piece names first, then the set-level name (item id without the armor
+     * slot suffix), so a full set can share {@code eternal_armor_layer_1/2.png}.
+     */
+    private static File wornTextureFile(Context ctx, CustomItem item, boolean upper) {
+        if (item.getType() != CustomItemType.ARMOR) {
+            return null;
+        }
+        String layer = upper ? "1" : "2";
+        String id = item.getId();
+        String[] names = {
+                id + "_layer_" + layer + ".png",
+                id + "_armor_layer_" + layer + ".png",
+        };
+        String set = stripArmorSlot(id);
+        if (!set.equals(id)) {
+            names = java.util.Arrays.copyOf(names, names.length + 1);
+            names[names.length - 1] = set + "_armor_layer_" + layer + ".png";
+        }
+        for (String name : names) {
+            File f = AssetPaths.resolve(ctx.dataFolder(), "assets/textures/" + name);
+            if (f != null && f.isFile()) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    /** Remove the armor slot suffix from an item id ("eternal_helmet" -> "eternal"). */
+    private static String stripArmorSlot(String id) {
+        for (String suffix : new String[]{"_helmet", "_chestplate", "_leggings", "_boots"}) {
+            if (id.endsWith(suffix) && id.length() > suffix.length()) {
+                return id.substring(0, id.length() - suffix.length());
+            }
+        }
+        return id;
+    }
+
+    /** Whether a PNG is already a flat 64x32 humanoid armor layer (not a square UV atlas). */
+    private static boolean isArmorLayerSize(File file) {
+        try {
+            BufferedImage img = ImageIO.read(file);
+            return img != null && img.getWidth() == 64 && img.getHeight() == 32;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Run the Bedrock->Java conversion, falling back to the original model if the converter
+     * cannot even load (e.g. Gson missing on an exotic server) so pack generation never dies.
+     */
+    private static String safeConvert(String content, String name, Context ctx) {
+        try {
+            return BedrockModelConverter.convert(content, name, ctx.logger());
+        } catch (LinkageError e) {
+            ctx.logger().warning("Model conversion unavailable for '" + name + "': " + e
+                    + " — using the model as-is");
+            return content;
+        }
+    }
+
+    /**
+     * Best-effort: find the PNG an imported model uses as its main texture
+     * ({@code assets/textures/<name>.png} for a {@code ns:item/<name>} reference).
+     * Prefers a reference matching the item id, otherwise the last one. Returns null
+     * when the model has no usable reference or the file is missing.
+     */
+    private static File modelLayerTexture(Context ctx, CustomItem item) {
+        File modelFile = AssetPaths.resolve(ctx.dataFolder(), item.getModelFile());
+        if (modelFile == null || !modelFile.isFile()) {
+            return null;
+        }
+        try {
+            String content = Files.readString(modelFile.toPath(), StandardCharsets.UTF_8);
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile(":item/([a-zA-Z0-9_]+)")
+                    .matcher(content);
+            String best = null;
+            String last = null;
+            while (m.find()) {
+                String name = m.group(1);
+                last = name;
+                if (name.equals(item.getId())) {
+                    best = name;
+                }
+            }
+            String chosen = best != null ? best : last;
+            if (chosen == null) {
+                return null;
+            }
+            File tex = AssetPaths.resolve(ctx.dataFolder(), "assets/textures/" + chosen + ".png");
+            return tex != null && tex.isFile() ? tex : null;
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private static byte[] scalePng(File file, int w, int h) throws IOException {
@@ -406,7 +545,9 @@ public final class PackGenerator {
                     ctx.logger().warning("Model file '" + item.getModelFile() + "' for '" + item.getId()
                             + "' is not a valid JSON object, using a generated model");
                 } else {
-                    return content;
+                    // Drag-and-drop support: Blockbench "Bedrock Edition" exports are converted
+                    // to the Java format automatically.
+                    return safeConvert(content, item.getId(), ctx);
                 }
             } catch (IOException e) {
                 ctx.logger().warning("Could not read model '" + item.getModelFile() + "': " + e.getMessage());

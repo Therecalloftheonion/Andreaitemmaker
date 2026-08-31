@@ -27,6 +27,7 @@ public class CustomItem {
     protected final boolean unbreakable;
     protected final boolean glow;
     protected final String textureSpec;
+    protected final String armorTextureSpec;
     protected final String modelFile;
     protected final Map<String, Map<String, Object>> mechanics;
 
@@ -43,6 +44,7 @@ public class CustomItem {
             boolean unbreakable,
             boolean glow,
             String textureSpec,
+            String armorTextureSpec,
             String modelFile,
             Map<String, Map<String, Object>> mechanics) {
         this.id = id;
@@ -57,6 +59,7 @@ public class CustomItem {
         this.unbreakable = unbreakable;
         this.glow = glow;
         this.textureSpec = textureSpec;
+        this.armorTextureSpec = armorTextureSpec;
         this.modelFile = modelFile;
         this.mechanics = mechanics == null ? Collections.emptyMap() : Collections.unmodifiableMap(mechanics);
     }
@@ -96,6 +99,16 @@ public class CustomItem {
     /** Attribute name (e.g. "attack_damage") to value. */
     public Map<String, Double> getAttributes() {
         return attributes;
+    }
+
+    /**
+     * Optional dedicated texture for the <em>worn</em> armor layer ({@code armor-texture:} in
+     * the config). Only used for ARMOR items; a proper 64x32 humanoid armor texture is ideal.
+     * Returns null when the worn layer should be derived from {@link #getTextureSpec()} or
+     * the model's own texture.
+     */
+    public String getArmorTextureSpec() {
+        return armorTextureSpec;
     }
 
     /** Enchantment key (e.g. "sharpness") to level. */

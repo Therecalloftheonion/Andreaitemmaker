@@ -4,14 +4,16 @@ import com.andreaitemmaker.api.CustomItem;
 import com.andreaitemmaker.util.Json;
 import org.bukkit.Material;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Modern layout (1.21.2+): every item gets its own {@code assets/<ns>/items/<id>.json}
  * definition and stacks carry the {@code minecraft:item_model} component, so any base
- * material works. Armor additionally gets an equipment asset; since 1.21.11 (pack format
- * 75) the armor layer textures moved under {@code textures/entity/equipment/...}.
+ * material works. Armor additionally gets an equipment asset; since 1.21.2 the armor
+ * layer textures live under {@code textures/entity/equipment/...} and the asset uses
+ * object-form layers ({@code [{"texture": ns:id}]}).
  */
 final class ModernPackLayout implements PackLayout {
 
@@ -35,17 +37,18 @@ final class ModernPackLayout implements PackLayout {
                                  CustomItem item, byte[] layer1, byte[] layer2) {
         String ns = ctx.namespace();
         String id = item.getId();
-        if (ctx.target().format() >= 75) {
-            // 1.21.11+: equipment textures live under textures/entity/equipment/...
-            PackGenerator.put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid/" + id + ".png", layer1);
-            PackGenerator.put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid_leggings/" + id + ".png", layer2);
-            PackGenerator.putString(entries, "assets/" + ns + "/equipment/" + id + ".json", Json.obj("layers", Map.of(
-                    "humanoid", List.of(Map.of("texture", ns + ":" + id)),
-                    "humanoid_leggings", List.of(Map.of("texture", ns + ":" + id)))));
-        } else {
-            PackGenerator.putString(entries, "assets/" + ns + "/equipment/" + id + ".json", Json.obj("layers", Map.of(
-                    "humanoid", List.of(ns + ":" + id),
-                    "humanoid_leggings", List.of(ns + ":" + id))));
-        }
+        // 1.21.2+ resolves layer textures as assets/<ns>/textures/entity/equipment/<layerType>/<id>.png.
+        PackGenerator.put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid/" + id + ".png", layer1);
+        PackGenerator.put(entries, "assets/" + ns + "/textures/entity/equipment/humanoid_leggings/" + id + ".png", layer2);
+        // Object-form layers: [{"texture": "ns:id"}]. Both layer types are always present:
+        // the client renders worn armor exclusively from these 2D layers (verified in the
+        // 1.21.4/1.21.5 client renderer) — there is no 3D-on-body fallback to omit into.
+        Map<String, Object> layers = new LinkedHashMap<>();
+        layers.put("humanoid", List.of(Map.of("texture", ns + ":" + id)));
+        layers.put("humanoid_leggings", List.of(Map.of("texture", ns + ":" + id)));
+        // 1.21.2-1.21.3: equipment models live under models/equipment/; 1.21.4+ moved them up to equipment/.
+        String dir = ctx.target().format() >= 46 ? "equipment" : "models/equipment";
+        PackGenerator.putString(entries, "assets/" + ns + "/" + dir + "/" + id + ".json",
+                Json.obj("layers", layers));
     }
 }

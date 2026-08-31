@@ -18,3 +18,6 @@ Thumbs.db
 # Local server data — contains real configs that may hold API tokens (never commit)
 plugins/
 *.log
+
+# User's local server copy (pack, config, personal items) — never commit
+/Andreaitemmaker/

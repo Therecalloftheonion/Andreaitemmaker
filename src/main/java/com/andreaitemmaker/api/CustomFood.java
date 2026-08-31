@@ -24,13 +24,14 @@ public class CustomFood extends CustomItem {
             boolean unbreakable,
             boolean glow,
             String textureSpec,
+            String armorTextureSpec,
             String modelFile,
             Map<String, Map<String, Object>> mechanics,
             int hunger,
             float saturation,
             int cooldown) {
         super(id, CustomItemType.FOOD, material, displayName, lore, customModelData, maxStackSize,
-                attributes, enchantments, unbreakable, glow, textureSpec, modelFile, mechanics);
+                attributes, enchantments, unbreakable, glow, textureSpec, armorTextureSpec, modelFile, mechanics);
         this.hunger = hunger;
         this.saturation = saturation;
         this.cooldown = cooldown;

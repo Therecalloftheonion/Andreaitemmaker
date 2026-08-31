@@ -22,17 +22,17 @@ class ContentRegistryTest {
 
     private static CustomBlock block(String id, Material base) {
         return new CustomBlock(id, Material.STICK, id, List.of(), 1000, 1,
-                Map.of(), Map.of(), false, false, null, null, Map.of(), base, true);
+                Map.of(), Map.of(), false, false, null, null, null, Map.of(), base, true);
     }
 
     private static CustomItem item(String id) {
         return new CustomItem(id, CustomItemType.ITEM, Material.STICK, id, List.of(), 1000, 1,
-                Map.of(), Map.of(), false, false, null, null, Map.of());
+                Map.of(), Map.of(), false, false, null, null, null, Map.of());
     }
 
     private static CustomFurniture furniture(String id) {
         return new CustomFurniture(id, Material.STICK, id, List.of(), 1000, 1,
-                Map.of(), Map.of(), false, false, null, null, Map.of(),
+                Map.of(), Map.of(), false, false, null, null, null, Map.of(),
                 false, true, true, 0, null, null);
     }
 
@@ -124,9 +124,9 @@ class ContentRegistryTest {
         ContentRegistry registry = ContentRegistry.build(List.of(
                 item("i"),
                 new CustomItem("w", CustomItemType.WEAPON, Material.STICK, "w", List.of(), 1000, 1,
-                        Map.of(), Map.of(), false, false, null, null, Map.of()),
+                        Map.of(), Map.of(), false, false, null, null, null, Map.of()),
                 new CustomItem("a", CustomItemType.ARMOR, Material.STICK, "a", List.of(), 1000, 1,
-                        Map.of(), Map.of(), false, false, null, null, Map.of()),
+                        Map.of(), Map.of(), false, false, null, null, null, Map.of()),
                 block("b", Material.STONE)));
         assertEquals(1, registry.getItems().size());
         assertEquals(1, registry.getWeapons().size());
