@@ -37,9 +37,7 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 | | |
 | --- | --- |
 | ![Custom items in-game](screenshots/in-game-items.png) | ![3D helmet worn on the head](screenshots/in-game-helmet-3d.png) |
-| Custom items with generated textures | 3D helmet rendered natively on the head |
 | ![Custom block in-game](screenshots/in-game-block.png) | ![Furniture in-game](screenshots/in-game-furniture.png) |
-| Custom block placed in the world | Furniture piece placed in the world |
 
 ## 🚀 Quick start
 
