@@ -61,7 +61,47 @@ public class CustomItem {
         this.textureSpec = textureSpec;
         this.armorTextureSpec = armorTextureSpec;
         this.modelFile = modelFile;
-        this.mechanics = mechanics == null ? Collections.emptyMap() : Collections.unmodifiableMap(mechanics);
+        // Deep-freeze: the constructor must never retain a reference to a caller-supplied
+        // mutable nested structure, or the whole class would silently stop being immutable.
+        this.mechanics = mechanics == null || mechanics.isEmpty()
+                ? Collections.emptyMap()
+                : freezeMechanics(mechanics);
+    }
+
+    /** Recursively copy and wrap a nested mechanic config map into an immutable deep structure. */
+    private static Map<String, Map<String, Object>> freezeMechanics(
+            Map<String, Map<String, Object>> source) {
+        Map<String, Map<String, Object>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, Object>> e : source.entrySet()) {
+            out.put(e.getKey(), deepImmutableMap(e.getValue()));
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    private static Map<String, Object> deepImmutableMap(Map<String, Object> source) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : source.entrySet()) {
+            out.put(e.getKey(), deepImmutable(e.getValue()));
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    private static Object deepImmutable(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> nested = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : map.entrySet()) {
+                nested.put(String.valueOf(e.getKey()), deepImmutable(e.getValue()));
+            }
+            return Collections.unmodifiableMap(nested);
+        }
+        if (value instanceof List<?> list) {
+            List<Object> immutable = new ArrayList<>(list.size());
+            for (Object entry : list) {
+                immutable.add(deepImmutable(entry));
+            }
+            return Collections.unmodifiableList(immutable);
+        }
+        return value;
     }
 
     /** Unique id of this content entry, e.g. "my_sword". */

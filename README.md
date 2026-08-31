@@ -8,7 +8,7 @@
 ![Spigot](https://img.shields.io/badge/Spigot%20%2F%20Paper-supported-brightgreen)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
 ![Version](https://img.shields.io/badge/version-2.0.0--beta-informational)
-![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen)
 ![Vibe](https://img.shields.io/badge/vibe-coded-ff69b4)
 
 *No manual resource pack work. No texture editor required. Just YAML.*
@@ -30,6 +30,17 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 
 **No resource pack experience required.** The plugin does the whole pipeline for you.
 
+## 📸 In-game screenshots
+
+*Real in-game captures from testing the plugin:*
+
+| | |
+| --- | --- |
+| ![Custom items in-game](screenshots/in-game-items.png) | ![3D helmet worn on the head](screenshots/in-game-helmet-3d.png) |
+| Custom items with generated textures | 3D helmet rendered natively on the head |
+| ![Custom block in-game](screenshots/in-game-block.png) | ![Furniture in-game](screenshots/in-game-furniture.png) |
+| Custom block placed in the world | Furniture piece placed in the world |
+
 ## 🚀 Quick start
 
 ```bash
@@ -47,6 +58,30 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 
 > **Port 8163** is opened by default for the built-in pack server. Firewalled? Host the
 > generated `pack/` folder anywhere and set `pack.public-url` — see [Hosting the pack](#hosting-the-pack).
+
+## 📚 Documentation
+
+Full documentation lives in [`docs/`](docs/) — **getting started**, **configuration**,
+**items/weapons/armor/food**, **blocks**, **furniture**, **mechanics**, **resource
+packs**, **commands & permissions**, the **developer API**, **compatibility**,
+**security** and an **FAQ**. A friendly version is also maintained on the
+[project wiki](https://github.com/Therecalloftheonion/Andreaitemmaker/wiki).
+
+| Doc | Covers |
+| --- | --- |
+| [getting-started.md](docs/getting-started.md) | install, first reload, folder layout |
+| [items.md](docs/items.md) | items, weapons, armor, food YAML |
+| [armor.md](docs/armor.md) | 3D helmets + 2D worn layers |
+| [blocks.md](docs/blocks.md) | custom blocks, persistent identity, explosions, pistons |
+| [furniture.md](docs/furniture.md) | furniture lifecycle & protection |
+| [mechanics.md](docs/mechanics.md) | built-in + custom mechanics |
+| [resource-packs.md](docs/resource-packs.md) | hosting, delivery, HTTP server |
+| [commands.md](docs/commands.md) | every command & permission |
+| [api.md](docs/api.md) | developer API with examples |
+| [compatibility.md](docs/compatibility.md) | version support table |
+| [security.md](docs/security.md) | path traversal, HTTP safety, secrets |
+| [manual-testing.md](docs/manual-testing.md) | the QA checklist |
+| [faq.md](docs/faq.md) | common questions |
 
 ## 📦 Requirements
 
@@ -122,16 +157,36 @@ through untouched.
 Any PNG in `assets/textures/` is copied into the pack (with its `.mcmeta` if it's animated).
 The model's texture path should point at `<namespace>:item/<name>` (default namespace: `itemmaker`).
 
-### Armor: the worn look (`armor-texture:`)
+### Armor: the worn look
 
-On 1.21.2+ the **worn** piece renders from a flat 2D layer, never from the 3D model. Set the
-worn texture explicitly with a dedicated 64×32 humanoid armor texture:
+On 1.21.2+ there are two **native** worn-rendering paths, chosen automatically per item.
+
+**3D helmets.** A `HEAD`-slot armor piece whose `model:` file exists renders as its actual
+3D model on the player's head — the same vanilla mechanism the carved pumpkin uses: the
+client draws the equipped item's own model in `head` display context. The visual and the
+gameplay state are literally the same stack, so they can't desync: what you equip is exactly
+what renders, in survival, for every player. No per-tick work, no invisible entities, no
+ModelEngine.
 
 ```yaml
 # items/my_helmet.yml
 type: ARMOR
 material: diamond_helmet
-model: "assets/models/my_helmet.json"     # 3D look in hand / inventory
+model: "assets/models/my_helmet.json"     # rendered 3D on the head when equipped
+```
+
+- Build the model in 16-unit "head space" — a 16×16×16 box from `0,0,0` to `16,16,16` covers
+  the head exactly, like the pumpkin — or add a `display.head` entry to fine-tune the pose.
+- `armor-texture:` is ignored for a 3D helmet: the model is the worn look.
+
+**2D layers (chest / legs / feet, and flat helmets).** The client has no native 3D worn path
+for body slots, so those pieces render from a flat 2D layer, never from the 3D model. Set the
+worn texture explicitly with a dedicated 64×32 humanoid armor texture:
+
+```yaml
+# items/my_chestplate.yml
+type: ARMOR
+material: diamond_chestplate
 armor-texture: "assets/textures/my_layer_1.png"   # 64x32 look when worn
 ```
 
@@ -242,7 +297,7 @@ Cooldown: %andreaitemmaker_cooldown_storm_blade_lightning%s
 
 ## 🧪 Tests
 
-56 unit tests cover PNG encode/decode round-trips, JSON validity, texture generation,
+80 unit tests cover PNG encode/decode round-trips, JSON validity, texture generation,
 version → pack-format mapping, full modern/legacy pack generation, plus:
 
 - path-traversal protection (absolute paths, `../`, Windows drives, backslashes, symlink escapes)

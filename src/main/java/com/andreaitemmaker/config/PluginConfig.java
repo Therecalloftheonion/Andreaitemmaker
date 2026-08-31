@@ -14,12 +14,15 @@ public final class PluginConfig {
     public final Pack pack;
     public final int customModelDataStart;
     public final int armorTickSeconds;
+    public final boolean explosionProtected;
 
-    private PluginConfig(String namespace, Pack pack, int customModelDataStart, int armorTickSeconds) {
+    private PluginConfig(String namespace, Pack pack, int customModelDataStart, int armorTickSeconds,
+                         boolean explosionProtected) {
         this.namespace = namespace;
         this.pack = pack;
         this.customModelDataStart = customModelDataStart;
         this.armorTickSeconds = armorTickSeconds;
+        this.explosionProtected = explosionProtected;
     }
 
     public static PluginConfig from(YamlConfiguration yaml) {
@@ -27,7 +30,8 @@ public final class PluginConfig {
         Pack pack = new Pack(yaml.getConfigurationSection("pack"));
         int cmdStart = yaml.getInt("content.custom-model-data-start", 1000);
         int armorTick = Math.max(1, yaml.getInt("content.armor-tick-seconds", 2));
-        return new PluginConfig(namespace, pack, cmdStart, armorTick);
+        boolean explosionProtected = yaml.getBoolean("content.explosion-protected", true);
+        return new PluginConfig(namespace, pack, cmdStart, armorTick, explosionProtected);
     }
 
     /** Resource pack related settings. */
@@ -61,7 +65,7 @@ public final class PluginConfig {
             this.formatOverride = (fmt instanceof Number n) ? n.intValue() : null;
             ConfigurationSection serve = root.getConfigurationSection("serve");
             this.serveEnabled = serve == null || serve.getBoolean("enabled", true);
-            this.servePort = serve == null ? 8163 : serve.getInt("port", 8163);
+            this.servePort = clampPort(serve == null ? 8163 : serve.getInt("port", 8163));
             this.publicUrl = root.getString("public-url", "");
             this.publicIp = root.getString("public-ip", "");
             ConfigurationSection upload = root.getConfigurationSection("upload");
@@ -76,6 +80,11 @@ public final class PluginConfig {
                 }
             }
             this.uploadHeaders = Collections.unmodifiableMap(headers);
+        }
+
+        /** Valid TCP port range; anything else is clamped to the default (config errors don't crash startup). */
+        private static int clampPort(int port) {
+            return port >= 1 && port <= 65535 ? port : 8163;
         }
 
         private static int clampTextureSize(int size) {

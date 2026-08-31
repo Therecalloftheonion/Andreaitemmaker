@@ -34,6 +34,9 @@ public final class JoinListener implements Listener {
 
     @EventHandler
     public void onPackStatus(PlayerResourcePackStatusEvent event) {
+        // Record the outcome so re-joining after a failed/declined attempt gets re-sent and
+        // players who already accepted are not prompted again on every join.
+        plugin.getPackManager().recordPackStatus(event.getPlayer(), event.getStatus().name());
         switch (event.getStatus()) {
             case DECLINED -> {
                 if (plugin.getConfigValues().pack.required) {

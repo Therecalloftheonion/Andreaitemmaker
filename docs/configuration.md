@@ -1,7 +1,10 @@
-# Andreaitemmaker main configuration.
-# config-version is managed automatically: when the plugin updates, new options are
-# added here while your existing values are preserved.
+# Configuration
 
+All options live in `plugins/Andreaitemmaker/config.yml`. `config-version` is managed
+automatically: plugin updates merge new options into your config while preserving every
+value you changed.
+
+```yaml
 config-version: 1
 
 # Namespace used for all generated resource pack assets (lowercase, no spaces).
@@ -28,9 +31,6 @@ pack:
   resend-on-reload: true
 
   # Built-in HTTP server that serves pack.zip. Disable it when using pack.upload instead.
-  # On every generation the pack is ALSO written unzipped to plugins/Andreaitemmaker/pack/
-  # (and as pack.zip), so if your firewall blocks the server port you can host that folder
-  # anywhere (file host, web server) and set pack.public-url below.
   serve:
     enabled: true
     port: 8163
@@ -45,7 +45,6 @@ pack:
     enabled: false
     method: PUT
     url: ""
-    # Final URL players use after the upload (e.g. your CDN link). Empty = upload url.
     public-url: ""
     headers:
       Authorization: "Bearer your-token-here"
@@ -58,3 +57,22 @@ content:
   # When true, placed custom blocks are immune to explosions (their persistent id stays
   # correct). When false, explosions destroy them like vanilla blocks and the id is cleaned up.
   explosion-protected: true
+```
+
+## Validation rules
+
+- `pack.serve.port` must be a valid port (1–65535); anything else falls back to 8163.
+- `pack.texture-size` only accepts 16, 32 or 64; anything else falls back to 16.
+- `namespace` must be lowercase and contain no spaces.
+- Content ids must be lowercase, alphanumeric with `_`/`-` (no spaces).
+- `model:` and `texture:` paths must be relative paths inside `assets/`. Traversal
+  attempts (`../`, absolute paths, Windows drives, backslashes, symlink escapes) are
+  rejected at load time with an error naming the exact file and field.
+
+## Explosions
+
+`content.explosion-protected` (default `true`):
+
+- `true` — placed custom blocks survive explosions; their persistent identity stays correct.
+- `false` — explosions destroy them like vanilla blocks; the persistent id is cleaned up
+  and drops are handled normally.

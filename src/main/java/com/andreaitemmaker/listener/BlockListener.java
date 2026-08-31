@@ -110,10 +110,19 @@ public final class BlockListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent event) {
+        boolean protectedCustom = plugin.getConfigValues().explosionProtected;
         List<Block> toRemove = new ArrayList<>();
-        for (Block b : event.blockList()) {
-            if (BlockData.get(b) != null) {
+        for (Block b : new ArrayList<>(event.blockList())) {
+            if (BlockData.get(b) == null) {
+                continue;
+            }
+            if (protectedCustom) {
+                // Protected: the custom block survives the explosion with its persistent id.
                 toRemove.add(b);
+            } else {
+                // Not protected: destroy like vanilla and drop its persistent identity so a
+                // stale tag can never linger on an air/block coordinate.
+                BlockData.remove(b);
             }
         }
         event.blockList().removeAll(toRemove);
@@ -121,10 +130,16 @@ public final class BlockListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
+        boolean protectedCustom = plugin.getConfigValues().explosionProtected;
         List<Block> toRemove = new ArrayList<>();
-        for (Block b : event.blockList()) {
-            if (BlockData.get(b) != null) {
+        for (Block b : new ArrayList<>(event.blockList())) {
+            if (BlockData.get(b) == null) {
+                continue;
+            }
+            if (protectedCustom) {
                 toRemove.add(b);
+            } else {
+                BlockData.remove(b);
             }
         }
         event.blockList().removeAll(toRemove);

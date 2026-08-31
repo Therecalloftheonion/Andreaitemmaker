@@ -51,9 +51,12 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
     private final PackHttpServer httpServer;
     private final PackUploader uploader = new PackUploader();
     private final GenerationCoordinator<PackSnapshot> coordinator = new GenerationCoordinator<>();
-    private final Set<UUID> sentTo = ConcurrentHashMap.newKeySet();
 
     private volatile PackState state;
+    private final ConcurrentHashMap<UUID, DeliveryState> deliveries = new ConcurrentHashMap<>();
+    private volatile long lastGenerationMillis = -1;
+    private volatile long lastGenerationBytes = -1;
+    private final java.util.concurrent.atomic.AtomicLong generationCount = new java.util.concurrent.atomic.AtomicLong();
 
     public ResourcePackManagerImpl(AndreaitemmakerPlugin plugin) {
         this.plugin = plugin;
@@ -100,6 +103,7 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
     private void runWorker() {
         while (true) {
             PackSnapshot snapshot = coordinator.next();
+            long t0 = System.currentTimeMillis();
             try {
                 PackGenerator.Context ctx = new PackGenerator.Context(
                         snapshot.namespace(), snapshot.target(), snapshot.version(), snapshot.textureSize(),
@@ -133,6 +137,9 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
 
                 GenerationOutcome outcome = new GenerationOutcome(
                         entries, bytes, sha1Bytes, sha1, format, packFile, packFolder, uploadedUrl);
+                generationCount.incrementAndGet();
+                lastGenerationMillis = System.currentTimeMillis() - t0;
+                lastGenerationBytes = bytes.length;
                 plugin.getServer().getScheduler().runTask(plugin, () -> publish(outcome, snapshot));
             } catch (Exception e) {
                 snapshot.logger().severe("Failed to generate resource pack: " + e);
@@ -177,9 +184,11 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
 
         state = new PackState(outcome.bytes(), outcome.sha1Bytes(), outcome.sha1(), url,
                 outcome.format(), serving, outcome.packFile(), outcome.packFolder());
-        sentTo.clear();
+        // A new pack identity: forget per-player delivery state for the previous pack so a
+        // player who failed to download the old pack gets offered the new one.
+        deliveries.clear();
         snapshot.logger().info("Resource pack generated: " + outcome.bytes().length + " bytes, SHA-1 "
-                + outcome.sha1() + ", format " + outcome.format());
+                + outcome.sha1() + ", format " + outcome.format() + " in " + lastGenerationMillis + "ms");
         if (pack.resendOnReload) {
             sendToAll();
         }
@@ -254,9 +263,56 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
         return state != null && state.serving() && httpServer.isRunning();
     }
 
-    /** Whether the player already received the current pack (used to avoid double prompts). */
+    /**
+     * Whether the player already accepted/loaded the current pack and should not be prompted
+     * again. A {@link #sendTo} attempt is made without this check when explicitly requested
+     * (e.g. {@code /aitem pack send}), but automatic sends (join, resend-on-reload) skip
+     * players who have already approved this pack to avoid spamming.
+     */
     public boolean wasSentTo(Player player) {
-        return player != null && sentTo.contains(player.getUniqueId());
+        if (player == null) {
+            return false;
+        }
+        DeliveryState delivery = deliveries.get(player.getUniqueId());
+        return delivery != null && delivery.accepted();
+    }
+
+    /** Record the player's pack-status event against the current pack identity. */
+    public void recordPackStatus(Player player, String status) {
+        if (player == null) {
+            return;
+        }
+        deliveries.compute(player.getUniqueId(), (uuid, existing) -> {
+            DeliveryState base = existing != null ? existing : new DeliveryState("", 0);
+            DeliveryStatus s = parseStatus(status);
+            // SUCCESSFULLY_LOADED / DECLINED after ACCEPTED are normal status-stream endings.
+            if (base.accepted() && (s == DeliveryStatus.SUCCESS || s == DeliveryStatus.ACCEPTED)) {
+                return base;
+            }
+            return new DeliveryState(currentSha1(), s.ordinal());
+        });
+    }
+
+    /** Number of players currently tracked with a delivery state (for {@code /aitem diagnose}). */
+    public int trackedDeliveries() {
+        return deliveries.size();
+    }
+
+    private static DeliveryStatus parseStatus(String status) {
+        // Spigot's enum value is SUCCESSFULLY_LOADED; normalize it to SUCCESS.
+        if ("SUCCESSFULLY_LOADED".equalsIgnoreCase(status)) {
+            return DeliveryStatus.SUCCESS;
+        }
+        try {
+            return DeliveryStatus.valueOf(status.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return DeliveryStatus.SENT;
+        }
+    }
+
+    private String currentSha1() {
+        PackState s = state;
+        return s == null ? "" : s.sha1();
     }
 
     @Override
@@ -271,7 +327,7 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
         if (packUrl == null || packUrl.isEmpty()) {
             return;
         }
-        sentTo.add(player.getUniqueId());
+        deliveries.put(player.getUniqueId(), new DeliveryState(currentSha1(), DeliveryStatus.SENT.ordinal()));
         Runnable task = () -> send0(player, packUrl);
         if (Bukkit.isPrimaryThread()) {
             task.run();
@@ -319,7 +375,33 @@ public final class ResourcePackManagerImpl implements ResourcePackManager {
     public void shutdown() {
         httpServer.stop();
         state = null;
-        sentTo.clear();
+        deliveries.clear();
+    }
+
+    /** Timing + diagnostics for the most recent successful generation. */
+    public long getLastGenerationMillis() {
+        return lastGenerationMillis;
+    }
+
+    public long getLastGenerationBytes() {
+        return lastGenerationBytes;
+    }
+
+    public long getGenerationCount() {
+        return generationCount.get();
+    }
+
+    /** Per-player status of the last attempted delivery of the current pack. */
+    public enum DeliveryStatus {
+        SENT, ACCEPTED, DECLINED, FAILED_DOWNLOAD, SUCCESS, INVALID_URL
+    }
+
+    /** Immutable per-player delivery record: which pack they were offered and how it went. */
+    private record DeliveryState(String packSha1, int statusOrdinal) {
+        boolean accepted() {
+            return statusOrdinal == DeliveryStatus.ACCEPTED.ordinal()
+                    || statusOrdinal == DeliveryStatus.SUCCESS.ordinal();
+        }
     }
 
     private static String hex(byte[] bytes) {

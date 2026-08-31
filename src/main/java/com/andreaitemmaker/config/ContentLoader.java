@@ -37,9 +37,26 @@ public final class ContentLoader {
             "CHAIN_COMMAND_BLOCK", "REPEATING_COMMAND_BLOCK");
 
     private final AndreaitemmakerPlugin plugin;
+    private final int customModelDataStart;
 
+    /**
+     * Load content using the plugin's current configuration. Used by in-memory callers that
+     * already hold an up-to-date {@link PluginConfig} snapshot so loading can run on a
+     * background thread without depending on mutable plugin state (see
+     * {@link #ContentLoader(AndreaitemmakerPlugin, PluginConfig)}).
+     */
     public ContentLoader(AndreaitemmakerPlugin plugin) {
+        this(plugin, plugin.getConfigValues());
+    }
+
+    /**
+     * Load content against an explicit configuration snapshot. This is the form used by the
+     * asynchronous reload, which computes a fresh {@link PluginConfig} on the background
+     * thread and must not read it from the plugin (which is still serving the old state).
+     */
+    public ContentLoader(AndreaitemmakerPlugin plugin, PluginConfig config) {
         this.plugin = plugin;
+        this.customModelDataStart = config == null ? 1000 : config.customModelDataStart;
     }
 
     public LoadResult load() {
@@ -47,7 +64,7 @@ public final class ContentLoader {
         Set<String> usedIds = new HashSet<>();
         Set<Integer> usedCmd = new HashSet<>();
         Set<Material> usedBases = new HashSet<>();
-        int[] nextCmd = {plugin.getConfigValues().customModelDataStart};
+        int[] nextCmd = {customModelDataStart};
 
         File dataFolder = plugin.getDataFolder();
         loadFolder(new File(dataFolder, "items"), null, result, usedIds, usedCmd, usedBases, nextCmd);

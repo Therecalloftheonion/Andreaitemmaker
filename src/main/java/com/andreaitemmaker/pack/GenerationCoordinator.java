@@ -62,4 +62,11 @@ public final class GenerationCoordinator<T> {
             return true;
         }
     }
+
+    /** Whether a snapshot is pending or a worker is currently running. */
+    public boolean isPending() {
+        synchronized (lock) {
+            return running;
+        }
+    }
 }

@@ -15,6 +15,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.io.File;
 import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -205,13 +206,23 @@ public final class ItemFactory {
     }
 
     /**
-     * Wire the equippable component so custom armor renders from its equipment asset when
-     * worn (1.21.2+). Paper's {@code setModel(NamespacedKey)} is the asset reference: on
-     * 1.21.4+ it maps to the component's {@code asset_id} field (there is no setAssetId
-     * method on current Paper), so it is the one call that must never be skipped. Optional
-     * fields are guarded individually so a missing method on an older Paper build cannot
-     * silently discard the whole wiring (previously an always-throwing setAssetId() call
-     * did exactly that, leaving vanilla armor on the player).
+     * Wire the equippable component so custom armor renders correctly when worn (1.21.2+).
+     * Paper's {@code setModel(NamespacedKey)} is the asset reference: on 1.21.4+ it maps to
+     * the component's {@code asset_id} field (there is no setAssetId method on current
+     * Paper), so it is the one call that must never be skipped. Optional fields are guarded
+     * individually so a missing method on an older Paper build cannot silently discard the
+     * whole wiring (previously an always-throwing setAssetId() call did exactly that,
+     * leaving vanilla armor on the player).
+     *
+     * <p><b>Native 3D helmets:</b> for a HEAD-slot armor item that has a real 3D model
+     * file, the model is set to {@code null} instead of the equipment asset. The client
+     * (1.21.2+) then renders the item's own 3D model on the player's head in the
+     * {@code head} display context — the exact mechanism the vanilla carved pumpkin uses
+     * (verified in the client: the living-entity renderer only takes the 2D equipment-asset
+     * path when the equippable component has a non-null model for the slot). This keeps the
+     * worn look and the gameplay state synchronized natively, with zero per-tick work and
+     * no entity hacks. Chest/legs/feet slots have no native 3D worn path, so they keep the
+     * 2D equipment asset.
      */
     private void wireEquippable(ItemMeta meta, CustomItem item, EquipmentSlot slot) {
         try {
@@ -221,8 +232,14 @@ public final class ItemFactory {
                 return;
             }
             Class<?> type = component.getClass();
-            invoke(type, component, "setModel", NamespacedKey.class,
-                    new NamespacedKey(plugin.getConfigValues().namespace, item.getId()));
+            if (useNative3dHead(slot, item.getModelFile(), hasModelFile(item))) {
+                // Equippable with NO model = native 3D worn rendering (carved-pumpkin path).
+                invoke(type, component, "setModel", NamespacedKey.class, null);
+            } else {
+                // 2D worn rendering: point the equippable at the generated equipment asset.
+                invoke(type, component, "setModel", NamespacedKey.class,
+                        new NamespacedKey(plugin.getConfigValues().namespace, item.getId()));
+            }
             invoke(type, component, "setSlot", EquipmentSlot.class, slot);
             tryInvoke(type, component, "setDamageOnHurt", boolean.class, false);
             tryInvoke(type, component, "setDispensable", boolean.class, true);
@@ -234,6 +251,21 @@ public final class ItemFactory {
             plugin.getLogger().log(Level.FINE,
                     "Could not wire equippable component for " + item.getId() + " (non-Paper server?)", e);
         }
+    }
+
+    /**
+     * Decision for native 3D worn rendering: only HEAD-slot armor with a real 3D model file
+     * (the one the pack actually includes, not the generated 2D fallback). Pure so it can
+     * be unit-tested without a server.
+     */
+    public static boolean useNative3dHead(EquipmentSlot slot, String modelFile, boolean modelExists) {
+        return slot == EquipmentSlot.HEAD && modelFile != null && modelExists;
+    }
+
+    /** True when the configured model JSON actually exists in the plugin's assets folder. */
+    private boolean hasModelFile(CustomItem item) {
+        return item.getModelFile() != null
+                && new File(plugin.getDataFolder(), item.getModelFile()).isFile();
     }
 
     /** Invoke an optional equippable setter; a missing method is fine and is ignored. */

@@ -139,6 +139,12 @@ public final class UseListener implements Listener {
             player.sendMessage(Chat.color("&cYou can't place that here."));
             return;
         }
+        // Respect server protection BEFORE touching the world or consuming the item, so a
+        // denied placement is fully atomic from the player's perspective.
+        if (!plugin.getProtectionService().canPlaceBlock(player, target)) {
+            player.sendMessage(Chat.color("&cYou can't build here."));
+            return;
+        }
         CustomBlockPlaceEvent placeEvent = new CustomBlockPlaceEvent(player, block, target, block.getBaseBlock());
         Bukkit.getPluginManager().callEvent(placeEvent);
         if (placeEvent.isCancelled()) {
@@ -165,6 +171,11 @@ public final class UseListener implements Listener {
         }
         Location location = target.getLocation().add(0.5, furniture.getOffsetY(), 0.5);
         location.setYaw(player.getLocation().getYaw() + 180);
+        // Furniture placement must respect the same protection layer as blocks.
+        if (!plugin.getProtectionService().canPlaceFurniture(player, location)) {
+            player.sendMessage(Chat.color("&cYou can't build here."));
+            return;
+        }
         CustomFurniturePlaceEvent placeEvent = new CustomFurniturePlaceEvent(player, furniture, location);
         Bukkit.getPluginManager().callEvent(placeEvent);
         if (placeEvent.isCancelled()) {

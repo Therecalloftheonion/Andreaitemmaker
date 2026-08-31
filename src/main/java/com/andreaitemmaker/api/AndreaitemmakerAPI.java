@@ -110,6 +110,20 @@ public final class AndreaitemmakerAPI {
         return plugin.getMechanicRegistry();
     }
 
+    /**
+     * The placement-protection gate. External protection plugins register a
+     * {@link com.andreaitemmaker.protection.ProtectionProvider} here so their rules apply to
+     * custom block and furniture placement; see {@code getProtection().registerProvider(...)}.
+     */
+    public com.andreaitemmaker.protection.ProtectionService getProtection() {
+        return plugin.getProtectionService();
+    }
+
+    /** Forwards to {@link #getProtection()}; kept for programming convenience. */
+    public com.andreaitemmaker.protection.ProtectionService getProtectionService() {
+        return plugin.getProtectionService();
+    }
+
     /** Reload configuration, content and the resource pack. */
     public void reload() {
         plugin.reloadAll();

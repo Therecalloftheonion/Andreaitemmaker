@@ -21,3 +21,11 @@ plugins/
 
 # User's local server copy (pack, config, personal items) — never commit
 /Andreaitemmaker/
+
+# User's own models, textures and asset files — NEVER commit (private content)
+**/assets/models/
+**/assets/textures/
+**/assets/**/*.png
+**/assets/**/*.mcmeta
+*.png.mcmeta
+wiki/

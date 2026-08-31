@@ -24,3 +24,6 @@ permissions:
   andreaitemmaker.bypass:
     description: Never receive the resource pack prompt.
     default: false
+  andreaitemmaker.build:
+    description: Allowed to place custom blocks and furniture.
+    default: true

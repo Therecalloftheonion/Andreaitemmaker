@@ -36,6 +36,8 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
             case "info" -> info(sender, args);
             case "reload" -> reload(sender);
             case "pack" -> pack(sender, args);
+            case "diagnose" -> diagnose(sender);
+            case "stats" -> stats(sender);
             default -> help(sender, label);
         }
         return true;
@@ -178,6 +180,56 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void diagnose(CommandSender sender) {
+        var manager = plugin.getPackManager();
+        sender.sendMessage(Chat.color("&b==== Andreaitemmaker diagnose ===="));
+        sender.sendMessage(Chat.color(" &7Plugin version: &f" + plugin.getDescription().getVersion()));
+        sender.sendMessage(Chat.color(" &7Server version: &f" + plugin.getServerVersion()
+                + " (" + Bukkit.getBukkitVersion() + ")"));
+        sender.sendMessage(Chat.color(" &7Java version: &f" + System.getProperty("java.version")));
+        sender.sendMessage(Chat.color(" &7Loaded content: &f" + plugin.getContentRegistry().getAll().size()
+                + " (items " + plugin.getContentRegistry().getItems().size()
+                + ", blocks " + plugin.getContentRegistry().getBlocks().size()
+                + ", furniture " + plugin.getContentRegistry().getFurnitures().size() + ")"));
+        sender.sendMessage(Chat.color(" &7Content load time: &f" + plugin.getLastContentLoadMillis() + "ms"));
+        sender.sendMessage(Chat.color(" &7Pack generated: &f" + manager.isGenerated()));
+        if (manager.isGenerated()) {
+            sender.sendMessage(Chat.color(" &7Pack SHA-1: &f" + manager.getSha1()));
+            sender.sendMessage(Chat.color(" &7Pack size: &f" + kb(manager.getLastGenerationBytes()) + " KB"));
+            sender.sendMessage(Chat.color(" &7Pack format: &f" + manager.getFormat()));
+            sender.sendMessage(Chat.color(" &7Last generated in: &f" + manager.getLastGenerationMillis() + "ms"));
+            sender.sendMessage(Chat.color(" &7Generations: &f" + manager.getGenerationCount()));
+        }
+        sender.sendMessage(Chat.color(" &7Pack HTTP server: &f" + (manager.isServing() ? "active" : "inactive")));
+        sender.sendMessage(Chat.color(" &7Pack URL: &f" + (manager.getUrl().isEmpty() ? "(none)" : manager.getUrl())));
+        sender.sendMessage(Chat.color(" &7WorldGuard: &f" + (plugin.getProtectionService().isWorldGuardActive()
+                ? "active" : "not detected")));
+        sender.sendMessage(Chat.color(" &7Protection providers: &f" + plugin.getProtectionService().providerCount()));
+        sender.sendMessage(Chat.color(" &7Reload in progress: &f" + plugin.isReloading()));
+    }
+
+    private void stats(CommandSender sender) {
+        var manager = plugin.getPackManager();
+        sender.sendMessage(Chat.color("&b==== Andreaitemmaker stats ===="));
+        sender.sendMessage(Chat.color(" &7Tracked armor players: &f" + plugin.getArmorTracker().snapshot().size()));
+        sender.sendMessage(Chat.color(" &7Furniture definitions: &f" + plugin.getContentRegistry().getFurnitures().size()));
+        sender.sendMessage(Chat.color(" &7Pack deliveries tracked: &f" + manager.trackedDeliveries()));
+        sender.sendMessage(Chat.color(" &7Content load time (last): &f" + plugin.getLastContentLoadMillis() + "ms"));
+        sender.sendMessage(Chat.color(" &7Pack generation time (last): &f" + manager.getLastGenerationMillis() + "ms"));
+        sender.sendMessage(Chat.color(" &7Pack bytes (last): &f" + (manager.getLastGenerationBytes() < 0
+                ? "n/a" : kb(manager.getLastGenerationBytes()) + " KB")));
+        sender.sendMessage(Chat.color(" &7Pack generations (total): &f" + manager.getGenerationCount()));
+        sender.sendMessage(Chat.color(" &7Reloads (last duration): &f" + plugin.getLastReloadMillis() + "ms"));
+        sender.sendMessage(Chat.color(" &7Mechanics registered: &f" + plugin.getMechanicRegistry().getAll().size()));
+    }
+
+    private static String kb(long bytes) {
+        if (bytes < 0) {
+            return "n/a";
+        }
+        return String.format("%.1f", bytes / 1024.0);
+    }
+
     private void help(CommandSender sender, String label) {
         sender.sendMessage(Chat.color("&bAndreaitemmaker commands:"));
         sender.sendMessage(Chat.color(" &f/" + label + " give <id> [amount] [player] &8- give a custom item"));
@@ -186,6 +238,8 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Chat.color(" &f/" + label + " pack send [player|all] &8- send the resource pack"));
         sender.sendMessage(Chat.color(" &f/" + label + " pack url &8- show the pack download URL + folder path"));
         sender.sendMessage(Chat.color(" &f/" + label + " pack regenerate"));
+        sender.sendMessage(Chat.color(" &f/" + label + " diagnose &8- show a full diagnostic report"));
+        sender.sendMessage(Chat.color(" &f/" + label + " stats &8- show performance metrics"));
         sender.sendMessage(Chat.color(" &f/" + label + " reload"));
     }
 
@@ -193,7 +247,8 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
-            for (String s : new String[]{"give", "list", "info", "pack", "reload", "help"}) {
+            for (String s : new String[]{"give", "list", "info", "pack", "reload", "diagnose", "stats",
+                    "help"}) {
                 if (s.startsWith(args[0].toLowerCase(Locale.ROOT))) {
                     out.add(s);
                 }
