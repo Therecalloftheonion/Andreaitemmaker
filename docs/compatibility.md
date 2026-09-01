@@ -27,4 +27,4 @@
 
 Item/armor support through GeyserMC's Bedrock resource packs is **not** implemented.
 Bedrock Edition clients render items/armor differently and would need a separate Bedrock
-pack. This is a known limitation, not a bug.
+pack. This is a known limitation, not a bug.We are working on a pack translator
