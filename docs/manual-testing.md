@@ -1,7 +1,7 @@
 # Manual testing checklist
 
 These tests must be performed **by the repository owner on a real server** before
-claiming production readiness. None of them have been run by automation.
+claiming production readiness. None of them have been run by automation.The server owner didnt however test them like he should
 
 ## Setup
 
