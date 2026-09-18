@@ -48,6 +48,16 @@ public final class ItemFactory {
         return KNOWN_ATTRIBUTES.contains(name.trim().toLowerCase());
     }
 
+    /**
+     * Every attribute name accepted in item configs, sorted. Exposed so the in-game editor can
+     * offer exactly the names the loader accepts instead of a hand-written second list.
+     */
+    public static java.util.List<String> knownAttributeNames() {
+        java.util.List<String> names = new java.util.ArrayList<>(KNOWN_ATTRIBUTES);
+        names.sort(String::compareTo);
+        return java.util.List.copyOf(names);
+    }
+
     /** Build the ItemStack for a custom item definition. */
     public ItemStack build(CustomItem item, int amount) {
         ItemStack stack = new ItemStack(item.getMaterial(), Math.max(1, Math.min(amount, 64)));

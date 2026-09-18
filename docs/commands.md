@@ -9,6 +9,11 @@ Aliases: `andreaitemmaker`, `aitem`, `itemmaker`.
 | `/aitem give <id> [amount] [player]` | Give a custom item |
 | `/aitem list [items\|weapons\|armor\|food\|blocks\|furniture]` | List loaded content |
 | `/aitem info <id>` | Show a content entry's details |
+| `/aitem editor` | Open the in-game YAML editor (see [editor.md](editor.md)) |
+| `/aitem editor create <type>` | Start a new `ITEM`, `WEAPON`, `ARMOR`, `FOOD`, `BLOCK` or `FURNITURE` entry |
+| `/aitem editor edit <id>` | Open an existing entry in the GUI |
+| `/aitem editor search <query>` | List matching content across every category |
+| `/aitem editor reload` | Same as `/aitem reload` |
 | `/aitem pack send [player\|all]` | Send the pack to a player or everyone |
 | `/aitem pack url` | Show the current download URL and pack folder path |
 | `/aitem pack regenerate` | Regenerate the pack and re-send to online players |
@@ -24,6 +29,7 @@ Aliases: `andreaitemmaker`, `aitem`, `itemmaker`.
 | `andreaitemmaker.give` | op | Give items |
 | `andreaitemmaker.bypass` | false | Never receive the pack prompt |
 | `andreaitemmaker.build` | true | Place custom blocks / furniture (checked against protection plugins too) |
+| `andreaitemmaker.editor` | op | Open the in-game YAML editor (`/aitem editor`) |
 
 ## Reload behavior
 

@@ -30,6 +30,31 @@ Server owners define custom content as YAML files. On every reload, Andreaitemma
 
 **No resource pack experience required.** The plugin does the whole pipeline for you.
 
+## 🖥️ In-game editor
+
+No YAML required either — `/aitem editor` opens a full GUI editor for the same files:
+
+* browse, search, create, duplicate and delete items, weapons, armor, food, blocks and furniture
+* edit every field with the right control (material and base-block pickers, toggles, numeric
+  prompts, texture designer, mechanic toggles with a generic parameter editor)
+* field-by-field validation that runs **the real loader** before writing, so the editor can never
+  save something the plugin would reject
+* a per-player working copy: nothing touches disk until you press Save, closing with unsaved
+  changes asks instead of discarding, and your own custom keys/comments/ordering are preserved
+* a 50-step undo/redo history per entry (one step per action, never per internal write), so you can
+  step back much further than a single revert
+* automatic backup of the previous file on every save, then a normal background reload and pack
+  regeneration
+
+```
+/aitem editor                      open the hub
+/aitem editor create WEAPON        start a new entry and pick its id
+/aitem editor edit storm_blade     open an existing entry
+/aitem editor search sword         list matches across every category
+```
+
+See [docs/editor.md](docs/editor.md) for the full guide.
+
 ## 📸 In-game screenshots
 
 *Real in-game captures from testing the plugin:*
@@ -74,6 +99,7 @@ packs**, **commands & permissions**, the **developer API**, **compatibility**,
 | [furniture.md](docs/furniture.md) | furniture lifecycle & protection |
 | [mechanics.md](docs/mechanics.md) | built-in + custom mechanics |
 | [resource-packs.md](docs/resource-packs.md) | hosting, delivery, HTTP server |
+| [editor.md](docs/editor.md) | the in-game YAML editor |
 | [commands.md](docs/commands.md) | every command & permission |
 | [api.md](docs/api.md) | developer API with examples |
 | [compatibility.md](docs/compatibility.md) | version support table |
@@ -222,6 +248,7 @@ Unknown mechanics are reported at load so typos are caught immediately. Other pl
 /aitem list [items|weapons|armor|food|blocks|furniture]
 /aitem info <id>
 /aitem pack send [player|all] | url | regenerate
+/aitem editor [create <type>|edit <id>|search <query>|reload]
 /aitem reload
 ```
 
@@ -232,6 +259,7 @@ Aliases: `andreaitemmaker`, `aitem`, `itemmaker`.
 | `andreaitemmaker.admin` | op | All commands |
 | `andreaitemmaker.give` | op | Give items |
 | `andreaitemmaker.bypass` | false | Never receive the pack prompt |
+| `andreaitemmaker.editor` | op | Open the in-game YAML editor |
 
 ## 🌐 Hosting the pack
 

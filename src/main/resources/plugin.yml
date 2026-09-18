@@ -27,3 +27,6 @@ permissions:
   andreaitemmaker.build:
     description: Allowed to place custom blocks and furniture.
     default: true
+  andreaitemmaker.editor:
+    description: Open the in-game YAML editor (/aitem editor) to create, edit and validate content.
+    default: op

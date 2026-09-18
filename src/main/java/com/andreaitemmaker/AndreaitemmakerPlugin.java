@@ -10,6 +10,7 @@ import com.andreaitemmaker.config.ContentLoader;
 import com.andreaitemmaker.config.PluginConfig;
 import com.andreaitemmaker.content.ContentRegistry;
 import com.andreaitemmaker.content.ItemFactory;
+import com.andreaitemmaker.editor.EditorManager;
 import com.andreaitemmaker.listener.ArmorListener;
 import com.andreaitemmaker.listener.ArmorTracker;
 import com.andreaitemmaker.listener.BlockListener;
@@ -48,6 +49,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
     private ServerVersion.PackTarget packTarget;
     private ArmorTracker armorTracker;
     private ProtectionService protectionService;
+    private EditorManager editorManager;
     private AndreaitemmakerExpansion papiExpansion;
     private int armorTaskId = -1;
     private int reconcileTaskId = -1;
@@ -93,6 +95,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         packManager = new ResourcePackManagerImpl(this);
         armorTracker = new ArmorTracker(this);
         protectionService = new ProtectionService();
+        editorManager = new EditorManager(this);
         packTarget = computePackTarget(configValues);
 
         ContentRegistry loaded = buildRegistry(configValues);
@@ -113,6 +116,7 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         getCommand("andreaitemmaker").setExecutor(command);
         getCommand("andreaitemmaker").setTabCompleter(command);
 
+        editorManager.start();
         startArmorTask();
         packManager.generate();
         AndreaitemmakerAPI.init(this);
@@ -124,6 +128,9 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (editorManager != null) {
+            editorManager.shutdown();
+        }
         AndreaitemmakerAPI.close();
         if (papiExpansion != null) {
             papiExpansion.unregister();
@@ -216,6 +223,10 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
         this.configValues = candidate.config();
         this.packTarget = candidate.target();
         this.contentRegistry = candidate.registry();
+        if (editorManager != null) {
+            // The content index the editor lists must not outlive the state it was built from.
+            editorManager.repository().invalidate();
+        }
         cancelTasks();
         startArmorTask();
         long t0 = System.currentTimeMillis();
@@ -428,6 +439,11 @@ public final class AndreaitemmakerPlugin extends JavaPlugin {
 
     public ProtectionService getProtectionService() {
         return protectionService;
+    }
+
+    /** The in-game YAML editor (sessions, menus and the content index). */
+    public EditorManager getEditorManager() {
+        return editorManager;
     }
 
     public ServerVersion.Version getServerVersion() {

@@ -38,6 +38,77 @@ public final class ContentLoader {
 
     private final AndreaitemmakerPlugin plugin;
     private final int customModelDataStart;
+    private final boolean quiet;
+
+    // ---- validation helpers shared with the in-game editor ----
+
+    /**
+     * True when {@code id} is a valid content id. The editor reuses this so a GUI-created entry
+     * can never be written with an id the loader would later reject.
+     */
+    public static boolean isValidId(String id) {
+        return id != null && ID_PATTERN.matcher(id).matches();
+    }
+
+    /** The folder name that holds each content type (blocks/furniture override the file's type). */
+    public static String folderFor(CustomItemType type) {
+        return switch (type) {
+            case BLOCK -> "blocks";
+            case FURNITURE -> "furniture";
+            default -> "items";
+        };
+    }
+
+    /**
+     * Parse a {@code type:} value, returning null instead of throwing. Used by the editor (and by
+     * {@link #parseType(String)} for the nice error message) so both agree on what is valid.
+     */
+    public static CustomItemType parseTypeOrNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        try {
+            return CustomItemType.valueOf(s.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether a vanilla material may back a custom block: a full occluding block that is not on
+     * the denylist. Extracted so the loader, the editor validator and the editor's base-block
+     * picker all enforce exactly the same rule.
+     */
+    public static boolean isValidBlockBase(Material base) {
+        return base != null && base.isBlock() && base.isOccluding() && !BLOCK_DENYLIST.contains(base.name());
+    }
+
+    /** Inline explanation of why {@link #isValidBlockBase(Material)} rejected a material. */
+    public static String blockBaseProblem(Material base) {
+        if (base == null) {
+            return "missing required field 'base-block'";
+        }
+        if (!base.isBlock()) {
+            return "base-block '" + base + "' is not a block";
+        }
+        if (!base.isOccluding()) {
+            return "base-block '" + base + "' must be a full solid block "
+                    + "(glass, stairs, slabs and similar cannot be used as a base)";
+        }
+        if (isDeniedBaseName(base.name())) {
+            return "base-block '" + base + "' is not allowed";
+        }
+        return null;
+    }
+
+    /**
+     * The denylist part of the base-block rule, by material name. This half of the rule does not
+     * consult the live block registry, so callers that only have a name (or that run without a
+     * server, like the editor's unit tests) can still apply it.
+     */
+    public static boolean isDeniedBaseName(String materialName) {
+        return materialName != null && BLOCK_DENYLIST.contains(materialName);
+    }
 
     /**
      * Load content using the plugin's current configuration. Used by in-memory callers that
@@ -55,8 +126,33 @@ public final class ContentLoader {
      * thread and must not read it from the plugin (which is still serving the old state).
      */
     public ContentLoader(AndreaitemmakerPlugin plugin, PluginConfig config) {
+        this(plugin, config, false);
+    }
+
+    /**
+     * Loading for the in-game editor: identical parsing and validation, but expected/reported
+     * problems are returned to the caller instead of spamming the console.
+     */
+    public ContentLoader(AndreaitemmakerPlugin plugin, PluginConfig config, boolean quiet) {
         this.plugin = plugin;
         this.customModelDataStart = config == null ? 1000 : config.customModelDataStart;
+        this.quiet = quiet;
+    }
+
+    /**
+     * Parse one content file with the same rules as a full load. Used by the in-game editor to
+     * validate/preview unsaved changes, so the editor can never accept a file the loader would
+     * reject (no second, drifting copy of the validation rules).
+     */
+    public LoadResult loadFile(File file, CustomItemType forcedType) {
+        LoadResult result = new LoadResult();
+        if (file == null || !file.isFile()) {
+            result.errors.add("file not found");
+            return result;
+        }
+        parse(file, forcedType, result, new HashSet<>(), new HashSet<>(), new HashSet<>(),
+                new int[]{customModelDataStart});
+        return result;
     }
 
     public LoadResult load() {
@@ -95,7 +191,7 @@ public final class ContentLoader {
         try {
             YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
             String id = yaml.getString("id", fileName.substring(0, fileName.length() - 4));
-            if (!ID_PATTERN.matcher(id).matches()) {
+            if (!isValidId(id)) {
                 throw new ConfigException(fileName, "invalid id '" + id + "' (use lowercase letters, numbers, '_', '-' or '.')");
             }
             if (!usedIds.add(id)) {
@@ -143,10 +239,14 @@ public final class ContentLoader {
             result.loaded++;
         } catch (ConfigException e) {
             result.errors.add(fileName + ": " + e.getMessage());
-            plugin.getLogger().warning("Skipped " + fileName + ": " + e.getMessage());
+            if (!quiet) {
+                plugin.getLogger().warning("Skipped " + fileName + ": " + e.getMessage());
+            }
         } catch (Exception e) {
             result.errors.add(fileName + ": unexpected error: " + e);
-            plugin.getLogger().warning("Skipped " + fileName + " (unexpected error): " + e);
+            if (!quiet) {
+                plugin.getLogger().warning("Skipped " + fileName + " (unexpected error): " + e);
+            }
         }
     }
 
@@ -156,15 +256,9 @@ public final class ContentLoader {
                                   boolean unbreakable, boolean glow, String texture, String armorTexture,
                                   String model, Map<String, Map<String, Object>> mechanics, Set<Material> usedBases) {
         Material base = requireMaterial(yaml, "base-block");
-        if (!base.isBlock()) {
-            throw new ConfigException(fileName, "base-block '" + base + "' is not a block");
-        }
-        if (!base.isOccluding()) {
-            throw new ConfigException(fileName, "base-block '" + base + "' must be a full solid block "
-                    + "(glass, stairs, slabs and similar cannot be used as a base)");
-        }
-        if (BLOCK_DENYLIST.contains(base.name())) {
-            throw new ConfigException(fileName, "base-block '" + base + "' is not allowed");
+        String baseProblem = blockBaseProblem(base);
+        if (baseProblem != null) {
+            throw new ConfigException(fileName, baseProblem);
         }
         if (!usedBases.add(base)) {
             throw new ConfigException(fileName, "base-block '" + base + "' is already used by another block");
@@ -214,11 +308,11 @@ public final class ContentLoader {
     // ---- helpers ----
 
     private static CustomItemType parseType(String s) {
-        try {
-            return CustomItemType.valueOf(s.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
+        CustomItemType type = parseTypeOrNull(s);
+        if (type == null) {
             throw new ConfigException("?", "unknown type '" + s + "' (use ITEM, WEAPON, ARMOR, FOOD)");
         }
+        return type;
     }
 
     private static Material requireMaterial(YamlConfiguration yaml, String path) {
@@ -266,12 +360,16 @@ public final class ContentLoader {
         for (String key : section.getKeys(false)) {
             Object v = section.get(key);
             if (!(v instanceof Number n)) {
-                plugin.getLogger().warning("Attribute '" + key + "' must be a number, ignored");
+                if (!quiet) {
+                    plugin.getLogger().warning("Attribute '" + key + "' must be a number, ignored");
+                }
                 continue;
             }
             String normalized = key.trim().toLowerCase(Locale.ROOT);
             if (ItemFactory.parseAttribute(normalized) == null) {
-                plugin.getLogger().warning("Unknown attribute '" + key + "', ignored");
+                if (!quiet) {
+                    plugin.getLogger().warning("Unknown attribute '" + key + "', ignored");
+                }
                 continue;
             }
             out.put(normalized, n.doubleValue());
@@ -288,7 +386,9 @@ public final class ContentLoader {
         for (String key : section.getKeys(false)) {
             Object v = section.get(key);
             if (!(v instanceof Number n)) {
-                plugin.getLogger().warning("Enchantment '" + key + "' must be a number, ignored");
+                if (!quiet) {
+                    plugin.getLogger().warning("Enchantment '" + key + "' must be a number, ignored");
+                }
                 continue;
             }
             out.put(key.trim().toLowerCase(Locale.ROOT), Math.max(1, n.intValue()));
@@ -370,7 +470,7 @@ public final class ContentLoader {
         return out;
     }
 
-    static Map<String, Object> sectionToMap(ConfigurationSection section) {
+    public static Map<String, Object> sectionToMap(ConfigurationSection section) {
         Map<String, Object> out = new LinkedHashMap<>();
         for (String key : section.getKeys(false)) {
             Object v = section.get(key);
@@ -395,7 +495,7 @@ public final class ContentLoader {
         return candidate;
     }
 
-    private static int defaultMaxStack(CustomItemType type) {
+    public static int defaultMaxStack(CustomItemType type) {
         return switch (type) {
             case WEAPON, ARMOR, BLOCK, FURNITURE -> 1;
             default -> 64;

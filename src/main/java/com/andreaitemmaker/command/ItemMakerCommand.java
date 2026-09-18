@@ -2,6 +2,10 @@ package com.andreaitemmaker.command;
 
 import com.andreaitemmaker.AndreaitemmakerPlugin;
 import com.andreaitemmaker.api.CustomItem;
+import com.andreaitemmaker.api.CustomItemType;
+import com.andreaitemmaker.config.ContentLoader;
+import com.andreaitemmaker.editor.EditorEntry;
+import com.andreaitemmaker.editor.EditorManager;
 import com.andreaitemmaker.util.Chat;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -38,6 +42,7 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
             case "pack" -> pack(sender, args);
             case "diagnose" -> diagnose(sender);
             case "stats" -> stats(sender);
+            case "editor" -> editor(sender, args);
             default -> help(sender, label);
         }
         return true;
@@ -180,6 +185,67 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /**
+     * /aitem editor — the in-game YAML editor.
+     *
+     * <p>Subcommands: no argument opens the main menu, {@code create <type>} starts a new entry,
+     * {@code edit <id>} opens an existing one, {@code search <query>} lists matches across every
+     * category, {@code reload} is the normal reload.
+     */
+    private void editor(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Chat.color("&cThe editor is in-game only. Use the YAML files and "
+                    + "/aitem give from the console."));
+            return;
+        }
+        if (!player.hasPermission("andreaitemmaker.editor") && !player.hasPermission("andreaitemmaker.admin")) {
+            player.sendMessage(Chat.color("&cYou don't have permission to do that."));
+            return;
+        }
+        EditorManager editor = plugin.getEditorManager();
+        if (args.length < 2) {
+            editor.openMain(player);
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "create" -> {
+                if (args.length < 3) {
+                    player.sendMessage(Chat.color("&cUsage: /aitem editor create <ITEM|WEAPON|ARMOR|FOOD|BLOCK|FURNITURE>"));
+                    return;
+                }
+                CustomItemType type = ContentLoader.parseTypeOrNull(args[2]);
+                if (type == null) {
+                    player.sendMessage(Chat.color("&cUnknown type '&f" + args[2] + "&c'."));
+                    return;
+                }
+                editor.createNew(player, type, null);
+            }
+            case "edit" -> {
+                if (args.length < 3) {
+                    player.sendMessage(Chat.color("&cUsage: /aitem editor edit <id>"));
+                    return;
+                }
+                EditorEntry entry = editor.repository().find(args[2]);
+                if (entry == null) {
+                    player.sendMessage(Chat.color("&cUnknown content '&f" + args[2] + "&c'."));
+                    return;
+                }
+                editor.edit(player, entry, null);
+            }
+            case "search" -> {
+                if (args.length < 3) {
+                    editor.promptSearch(player, null);
+                } else {
+                    editor.openSearch(player, String.join(" ",
+                            java.util.Arrays.copyOfRange(args, 2, args.length)));
+                }
+            }
+            case "reload" -> reload(sender);
+            default -> player.sendMessage(Chat.color(
+                    "&cUsage: /aitem editor [create <type>|edit <id>|search <query>|reload]"));
+        }
+    }
+
     private void diagnose(CommandSender sender) {
         var manager = plugin.getPackManager();
         sender.sendMessage(Chat.color("&b==== Andreaitemmaker diagnose ===="));
@@ -238,6 +304,8 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Chat.color(" &f/" + label + " pack send [player|all] &8- send the resource pack"));
         sender.sendMessage(Chat.color(" &f/" + label + " pack url &8- show the pack download URL + folder path"));
         sender.sendMessage(Chat.color(" &f/" + label + " pack regenerate"));
+        sender.sendMessage(Chat.color(" &f/" + label + " editor &8- open the in-game YAML editor"));
+        sender.sendMessage(Chat.color(" &f/" + label + " editor create|edit <id>|search <query>"));
         sender.sendMessage(Chat.color(" &f/" + label + " diagnose &8- show a full diagnostic report"));
         sender.sendMessage(Chat.color(" &f/" + label + " stats &8- show performance metrics"));
         sender.sendMessage(Chat.color(" &f/" + label + " reload"));
@@ -247,10 +315,29 @@ public final class ItemMakerCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
-            for (String s : new String[]{"give", "list", "info", "pack", "reload", "diagnose", "stats",
-                    "help"}) {
+            for (String s : new String[]{"give", "list", "info", "pack", "editor", "reload", "diagnose",
+                    "stats", "help"}) {
                 if (s.startsWith(args[0].toLowerCase(Locale.ROOT))) {
                     out.add(s);
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("editor")) {
+            for (String s : new String[]{"create", "edit", "search", "reload"}) {
+                if (s.startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                    out.add(s);
+                }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("create")) {
+            for (CustomItemType type : CustomItemType.values()) {
+                if (type.name().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    out.add(type.name().toLowerCase(Locale.ROOT));
+                }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("editor")
+                && (args[1].equalsIgnoreCase("edit") || args[1].equalsIgnoreCase("search"))) {
+            for (CustomItem item : plugin.getContentRegistry().getAll()) {
+                if (item.getId().startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    out.add(item.getId());
                 }
             }
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("info"))) {
